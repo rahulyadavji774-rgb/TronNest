@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1c0707" />
+      <stop offset="100%" stop-color="#050101" />
+    </radialGradient>
+
+    <!-- Main Shield Glow -->
+    <radialGradient id="nestGlow" cx="50%" cy="40%" r="40%">
+      <stop offset="0%" stop-color="#ef4444" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Gold/Red Accent Gradient -->
+    <linearGradient id="neonRed" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="50%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </linearGradient>
+
+    <linearGradient id="glowingWhite" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#ef4444" stop-opacity="0.2" />
+    </linearGradient>
+
+    <!-- Drop Shadow for Depth -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="12" />
+      <feOffset dx="0" dy="8" />
+      <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+
+  <!-- Subtle grid pattern in background -->
+  <g opacity="0.08">
+    <path d="M 0,64 L 512,64 M 0,128 L 512,128 M 0,192 L 512,192 M 0,256 L 512,256 M 0,320 L 512,320 M 0,384 L 512,384 M 0,448 L 512,448" stroke="#ef4444" stroke-width="1" />
+    <path d="M 64,0 L 64,512 M 128,0 L 128,512 M 192,0 L 192,512 M 256,0 L 256,512 M 320,0 L 320,512 M 384,0 L 384,512 M 448,0 L 448,512" stroke="#ef4444" stroke-width="1" />
+  </g>
+
+  <!-- Ambient Glow Behind the Nest -->
+  <circle cx="256" cy="256" r="160" fill="url(#nestGlow)" />
+
+  <!-- Outer Cyber Ring -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#ef4444" stroke-width="2" stroke-opacity="0.2" stroke-dasharray="10, 15" />
+  <circle cx="256" cy="256" r="190" fill="none" stroke="#ef4444" stroke-width="1" stroke-opacity="0.1" />
+
+  <!-- Hexagonal Tech Border -->
+  <polygon points="256,80 408,168 408,344 256,432 104,344 104,168" fill="none" stroke="url(#neonRed)" stroke-width="3" filter="url(#glow)" />
+  <polygon points="256,92 396,174 396,338 256,420 116,338 116,174" fill="none" stroke="#ef4444" stroke-width="1" stroke-opacity="0.3" />
+
+  <!-- Inner Nest Shield Content -->
+  <g filter="url(#shadow)">
+    <!-- Base Nest Nesting Archs (Outer curve) -->
+    <path d="M 160,280 C 160,360 210,400 256,400 C 302,400 352,360 352,280" fill="none" stroke="url(#neonRed)" stroke-width="12" stroke-linecap="round" filter="url(#glow)" />
+    
+    <!-- Middle Nesting Arch -->
+    <path d="M 185,300 C 185,360 220,380 256,380 C 292,380 327,360 327,300" fill="none" stroke="url(#neonRed)" stroke-width="8" stroke-linecap="round" stroke-opacity="0.8" />
+
+    <!-- Inner Nesting Arch -->
+    <path d="M 210,320 C 210,355 230,365 256,365 C 282,365 302,355 302,320" fill="none" stroke="url(#neonRed)" stroke-width="5" stroke-linecap="round" stroke-opacity="0.6" />
+
+    <!-- TRON Logo Triangles / Wings nested inside -->
+    <!-- Center core node -->
+    <polygon points="256,150 210,240 302,240" fill="url(#neonRed)" filter="url(#glow)" />
+    
+    <!-- Floating Cyber Particles / Sparks -->
+    <circle cx="256" cy="195" r="5" fill="#ffffff" filter="url(#glow)" />
+    <circle cx="215" cy="270" r="3" fill="#ef4444" />
+    <circle cx="297" cy="270" r="3" fill="#ef4444" />
+    <circle cx="256" cy="285" r="4" fill="#ffffff" filter="url(#glow)" />
+
+    <!-- Shield Highlights -->
+    <path d="M 112,174 L 256,92" fill="none" stroke="url(#glowingWhite)" stroke-width="3" stroke-linecap="round" />
+  </g>
+</svg>

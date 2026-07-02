@@ -226,25 +226,86 @@ export class AuthController {
    * Verify passcode for existing session restore
    */
   public verifyPasscodeAndLogin = async (req: Request, res: Response) => {
-    const { address, passcode } = req.body;
+    const { address, passcode, privateKey, seedPhrase } = req.body;
+
+    logger.info('[Unlock Flow - Server] New passcode verification request:', { address, hasPrivateKey: !!privateKey, hasSeedPhrase: !!seedPhrase });
 
     if (!address || !passcode) {
+      logger.error('[Unlock Flow - Server] Missing required params:', { address, hasPasscode: !!passcode });
       return res.status(400).json({ success: false, message: 'Wallet address and passcode are required' });
     }
 
     try {
-      const wallet = this.db.findOne<any>('wallets', w => w.address === address);
+      logger.info('[Unlock Flow - Server] Step 1/4: Looking up wallet in database...');
+      let wallet = this.db.findOne<any>('wallets', w => w.address === address);
+      
       if (!wallet) {
-        return res.status(404).json({ success: false, message: 'Wallet registration not found' });
+        logger.warn('[Unlock Flow - Server] Wallet registration not found in database.');
+        if (privateKey && seedPhrase) {
+          logger.info('[Unlock Flow - Server] State Restoration: Attempting to recreate database records on-the-fly from secure device backup...');
+          
+          const seedHash = crypto.createHash('sha256').update(seedPhrase.trim().toLowerCase()).digest('hex');
+          
+          let user = this.db.findOne<any>('users', u => u.seed_phrase_hash === seedHash);
+          if (!user) {
+            logger.info('[Unlock Flow - Server] Creating new database user record...');
+            user = this.db.insert<any>('users', {
+              seed_phrase_hash: seedHash,
+              status: 'active'
+            });
+          }
+
+          logger.info('[Unlock Flow - Server] Encrypting keypair for secure database storage...');
+          const encryptedSeed = encrypt(seedPhrase.trim().toLowerCase());
+          const encryptedPrivateKey = encrypt(privateKey);
+
+          logger.info('[Unlock Flow - Server] Inserting wallet record into database...');
+          wallet = this.db.insert<any>('wallets', {
+            user_id: user.id,
+            address: address,
+            encrypted_seed: encryptedSeed,
+            encrypted_private_key: encryptedPrivateKey
+          });
+
+          logger.info('[Unlock Flow - Server] Creating secure bcrypt hashed passcode security profile...');
+          const passcodeHash = await bcrypt.hash(passcode, 12);
+          this.db.insert<any>('wallet_security', {
+            wallet_id: wallet.id,
+            passcode_hash: passcodeHash,
+            failed_attempts: 0,
+            locked_until: null
+          });
+
+          logger.info('[Unlock Flow - Server] Syncing and initializing token balances...');
+          const tokens = this.db.query<any>('tokens');
+          for (const token of tokens) {
+            const existingBalance = this.db.findOne<any>('balances', b => b.wallet_id === wallet.id && b.token_id === token.id);
+            if (!existingBalance) {
+              this.db.insert<any>('balances', {
+                wallet_id: wallet.id,
+                token_id: token.id,
+                balance: 0.0
+              });
+            }
+          }
+
+          logger.info('[Unlock Flow - Server] State Restoration completed successfully.');
+        } else {
+          logger.error('[Unlock Flow - Server] Cannot auto-restore: No keypair backup sent from local storage.');
+          return res.status(404).json({ success: false, message: 'Wallet registration not found' });
+        }
       }
 
+      logger.info('[Unlock Flow - Server] Step 2/4: Verifying wallet security rules...');
       const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === wallet.id);
       if (!security) {
+        logger.error('[Unlock Flow - Server] Wallet security profile is completely missing/corrupted.');
         return res.status(404).json({ success: false, message: 'Wallet security rules not set' });
       }
 
       // Check if locked
       if (security.locked_until && new Date(security.locked_until) > new Date()) {
+        logger.warn('[Unlock Flow - Server] PIN Verification rejected: Account currently locked.');
         return res.status(403).json({
           success: false,
           message: `This account is locked due to multiple failed passcode attempts. Please try again after ${new Date(security.locked_until).toLocaleTimeString()}`
@@ -252,6 +313,7 @@ export class AuthController {
       }
 
       // Verify passcode using bcrypt
+      logger.info('[Unlock Flow - Server] Step 3/4: Validating passcode PIN via bcrypt...');
       const isMatch = await bcrypt.compare(passcode, security.passcode_hash);
       if (!isMatch) {
         const failedAttempts = security.failed_attempts + 1;
@@ -264,6 +326,8 @@ export class AuthController {
           failed_attempts: failedAttempts,
           locked_until: lockedUntil
         });
+
+        logger.warn('[Unlock Flow - Server] PIN Validation failed:', { failedAttempts });
 
         return res.status(401).json({
           success: false,
@@ -279,6 +343,7 @@ export class AuthController {
         locked_until: null
       });
 
+      logger.info('[Unlock Flow - Server] Step 4/4: Generating secure JWT authentication session...');
       // Generate session JWTs (Access & Refresh)
       const token = jwt.sign(
         { id: wallet.user_id, walletId: wallet.id, address: wallet.address },
@@ -296,6 +361,7 @@ export class AuthController {
       const userAgent = req.headers['user-agent'] || 'Unknown Device';
 
       // Store session with device details and refresh token
+      logger.info('[Unlock Flow - Server] Creating secure session registry entry...');
       this.db.insert<any>('sessions', {
         user_id: wallet.user_id,
         token: token,
@@ -312,6 +378,8 @@ export class AuthController {
         details: { address: wallet.address },
         ip_address: req.ip || '127.0.0.1'
       });
+
+      logger.info('[Unlock Flow - Server] Session creation complete. JWT generated.');
 
       return res.status(200).json({
         success: true,
@@ -438,6 +506,50 @@ export class AuthController {
       return res.status(200).json({ success: true, message: 'Successfully logged out of all devices' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to logout from all devices' });
+    }
+  };
+
+  /**
+   * Change user passcode / PIN
+   */
+  public changePasscode = async (req: Request, res: Response) => {
+    const { address, oldPasscode, newPasscode } = req.body;
+
+    if (!address || !oldPasscode || !newPasscode) {
+      return res.status(400).json({ success: false, message: 'Missing parameters' });
+    }
+
+    if (!/^\d{6}$/.test(newPasscode)) {
+      return res.status(400).json({ success: false, message: 'New passcode must be exactly 6 digits' });
+    }
+
+    try {
+      const wallet = this.db.findOne<any>('wallets', w => w.address === address);
+      if (!wallet) {
+        return res.status(404).json({ success: false, message: 'Wallet not found' });
+      }
+
+      const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === wallet.id);
+      if (!security) {
+        return res.status(404).json({ success: false, message: 'Security profile not found' });
+      }
+
+      // Verify old passcode
+      const isValid = await bcrypt.compare(oldPasscode, security.passcode_hash);
+      if (!isValid) {
+        return res.status(400).json({ success: false, message: 'Incorrect current passcode' });
+      }
+
+      // Update with new passcode
+      const newHash = await bcrypt.hash(newPasscode, 12);
+      this.db.update('wallet_security', security.id, {
+        passcode_hash: newHash,
+        failed_attempts: 0
+      });
+
+      return res.status(200).json({ success: true, message: 'Passcode changed successfully' });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: 'Failed to update passcode' });
     }
   };
 }

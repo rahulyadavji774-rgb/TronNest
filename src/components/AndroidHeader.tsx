@@ -15,7 +15,7 @@ export default function AndroidHeader() {
   }, []);
 
   return (
-    <div className="flex items-center justify-between px-6 py-2.5 bg-black/60 backdrop-blur-md border-b border-white/5 select-none text-[11px] font-mono font-medium tracking-tight text-neutral-400">
+    <div className="flex items-center justify-between px-6 pt-[calc(8px+env(safe-area-inset-top,0px))] pb-2.5 bg-black/60 backdrop-blur-md border-b border-white/5 select-none text-[11px] font-mono font-medium tracking-tight text-neutral-400">
       <div className="flex items-center gap-1.5">
         <span className="text-white font-semibold">{time}</span>
         <span className="text-[9px] px-1 bg-red-950 text-red-500 rounded border border-red-900/50 flex items-center gap-0.5">

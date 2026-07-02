@@ -11,6 +11,7 @@ router.post('/generate', sensitiveActionLimiter, controller.generateNewWalletAnd
 router.post('/finalize', sensitiveActionLimiter, controller.finalizeWalletSetup);
 router.post('/import', sensitiveActionLimiter, controller.importWallet);
 router.post('/verify-passcode', sensitiveActionLimiter, controller.verifyPasscodeAndLogin);
+router.post('/change-passcode', sensitiveActionLimiter, controller.changePasscode);
 router.post('/refresh', controller.refreshToken);
 router.post('/logout', controller.logout);
 router.post('/logout-all', controller.logoutAllDevices);

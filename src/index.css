@@ -69,3 +69,70 @@
 .red-laser {
   animation: laser-scan 2.5s infinite linear;
 }
+
+/* Mobile PWA & Notch Optimizations */
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* Prevent body-level scrolling */
+  background-color: #0a0a0a;
+  color: #f5f5f5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation; /* Prevents double-tap zooming on mobile */
+}
+
+/* Scrollable container standard */
+.scrollable-y {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Butter-smooth momentum scrolling on iOS */
+  max-height: 100%;
+}
+
+/* Hide scrollbars for ultra clean mobile look */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe-area insets to adjust padding dynamically on iPhone Pro Max, Pixel, and other notch screens */
+.safe-padding-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-padding-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-padding-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.safe-padding-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Prevents automatic iOS browser font resizing when rotating */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Prevent zoom on text inputs for iOS Safari (requires font-size: 16px or larger, otherwise browser zooms) */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Smooth motion enhancements */
+.page-transition-wrap {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+

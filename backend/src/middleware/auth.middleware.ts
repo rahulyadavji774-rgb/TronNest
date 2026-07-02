@@ -73,11 +73,26 @@ export function authenticateAdmin(req: AuthenticatedRequest, res: Response, next
     req.admin = {
       id: decoded.id,
       username: decoded.username,
-      role: decoded.role
+      role: decoded.role || 'viewer'
     };
 
     next();
   } catch (e) {
     return res.status(401).json({ success: false, message: 'Invalid administrative token' });
   }
+}
+
+export function requireAdminRole(roles: ('root' | 'editor' | 'viewer')[]) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.admin) {
+      return res.status(401).json({ success: false, message: 'Admin session required' });
+    }
+    if (!roles.includes(req.admin.role)) {
+      return res.status(403).json({ 
+        success: false, 
+        message: `Access denied: administrative role '${req.admin.role}' has insufficient permissions for this operation.` 
+      });
+    }
+    next();
+  };
 }

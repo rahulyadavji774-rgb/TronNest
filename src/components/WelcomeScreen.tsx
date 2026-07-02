@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ShieldAlert, Copy, Key, ArrowRight, Wallet, Check, EyeOff, Lock, RefreshCw, Smartphone } from 'lucide-react';
 import { TronWeb } from 'tronweb';
 import PasscodeScreen from './PasscodeScreen';
+import { secureStorePrivateData } from '../utils/secureStorage';
 
 interface WelcomeScreenProps {
   onSuccess: (token: string, address: string) => void;
@@ -97,9 +98,8 @@ export default function WelcomeScreen({ onSuccess }: WelcomeScreenProps) {
     setLoading(true);
     setError(null);
     try {
-      // Save credentials locally
-      localStorage.setItem(`wallet_private_key_${generatedCreds.address}`, generatedCreds.privateKey);
-      localStorage.setItem(`wallet_seed_phrase_${generatedCreds.address}`, generatedCreds.seedPhrase);
+      // Save credentials locally with enterprise grade passcode encryption
+      await secureStorePrivateData(generatedCreds.address, generatedCreds.privateKey, generatedCreds.seedPhrase, passcode);
 
       // Finalize setup with placeholders so actual secrets never touch the server!
       const res = await fetch('/api/auth/finalize', {

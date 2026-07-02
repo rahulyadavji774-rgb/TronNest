@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { AdminController } from '../controllers/admin.controller';
-import { authenticateAdmin } from '../middleware/auth.middleware';
+import { authenticateAdmin, requireAdminRole } from '../middleware/auth.middleware';
 import { sensitiveActionLimiter } from '../middleware/rate-limiter.middleware';
 
 const router = Router();
@@ -12,33 +12,40 @@ router.post('/login', sensitiveActionLimiter, controller.adminLogin);
 // Authenticated admin routes
 router.use(authenticateAdmin);
 
-router.get('/dashboard-stats', controller.getDashboardStats);
-router.get('/users', controller.listUsers);
-router.post('/users/freeze', controller.freezeWallet);
-router.post('/users/unfreeze', controller.unfreezeWallet);
+// Read operations: Available to Root (Super Admin), Editor (Admin), and Viewer (Read-only)
+router.get('/dashboard-stats', requireAdminRole(['root', 'editor', 'viewer']), controller.getDashboardStats);
+router.get('/users', requireAdminRole(['root', 'editor', 'viewer']), controller.listUsers);
+router.get('/tokens', requireAdminRole(['root', 'editor', 'viewer']), controller.listTokens);
+router.get('/ledger', requireAdminRole(['root', 'editor', 'viewer']), controller.getLedger);
+router.get('/users/:userId/balances', requireAdminRole(['root', 'editor', 'viewer']), controller.getUserBalances);
+router.get('/audit-logs', requireAdminRole(['root', 'editor', 'viewer']), controller.getAuditLogs);
 
-router.get('/tokens', controller.listTokens);
-router.post('/tokens/create', controller.createToken);
-router.post('/tokens/update', controller.updateToken);
-router.post('/tokens/hide', controller.hideToken);
-router.post('/tokens/show', controller.showToken);
-router.post('/tokens/enable-transfer', controller.enableTransfer);
-router.post('/tokens/disable-transfer', controller.disableTransfer);
-router.post('/tokens/toggle-visibility', controller.toggleTokenVisibility);
-router.post('/tokens/change-price', controller.changeTokenPrice);
-router.delete('/tokens/:tokenId', controller.deleteToken);
+// Mutating User Operations: Root & Editor only
+router.post('/users/freeze', requireAdminRole(['root', 'editor']), controller.freezeWallet);
+router.post('/users/unfreeze', requireAdminRole(['root', 'editor']), controller.unfreezeWallet);
 
-router.post('/tokens/mint', controller.mintTokens);
-router.post('/tokens/deduct', controller.deductTokens);
+// Mutating Token Operations: Root & Editor only
+router.post('/tokens/create', requireAdminRole(['root', 'editor']), controller.createToken);
+router.post('/tokens/update', requireAdminRole(['root', 'editor']), controller.updateToken);
+router.post('/tokens/hide', requireAdminRole(['root', 'editor']), controller.hideToken);
+router.post('/tokens/show', requireAdminRole(['root', 'editor']), controller.showToken);
+router.post('/tokens/enable-transfer', requireAdminRole(['root', 'editor']), controller.enableTransfer);
+router.post('/tokens/disable-transfer', requireAdminRole(['root', 'editor']), controller.disableTransfer);
+router.post('/tokens/toggle-visibility', requireAdminRole(['root', 'editor']), controller.toggleTokenVisibility);
+router.post('/tokens/change-price', requireAdminRole(['root', 'editor']), controller.changeTokenPrice);
 
-router.get('/ledger', controller.getLedger);
-router.get('/users/:userId/balances', controller.getUserBalances);
-router.post('/users/balances/freeze', controller.freezeUserBalance);
-router.post('/users/balances/unfreeze', controller.unfreezeUserBalance);
-router.post('/users/balances/reset', controller.resetUserBalance);
-router.post('/users/balances/credit', controller.creditUserBalance);
-router.post('/users/balances/debit', controller.debitUserBalance);
+// Highly Sensitive Token Deletion: Root (Super Admin) only
+router.delete('/tokens/:tokenId', requireAdminRole(['root']), controller.deleteToken);
 
-router.get('/audit-logs', controller.getAuditLogs);
+// Supply Adjustments & Minting: Root & Editor only
+router.post('/tokens/mint', requireAdminRole(['root', 'editor']), controller.mintTokens);
+router.post('/tokens/deduct', requireAdminRole(['root', 'editor']), controller.deductTokens);
+
+// User-Specific Balance Administration: Root & Editor only
+router.post('/users/balances/freeze', requireAdminRole(['root', 'editor']), controller.freezeUserBalance);
+router.post('/users/balances/unfreeze', requireAdminRole(['root', 'editor']), controller.unfreezeUserBalance);
+router.post('/users/balances/reset', requireAdminRole(['root', 'editor']), controller.resetUserBalance);
+router.post('/users/balances/credit', requireAdminRole(['root', 'editor']), controller.creditUserBalance);
+router.post('/users/balances/debit', requireAdminRole(['root', 'editor']), controller.debitUserBalance);
 
 export default router;

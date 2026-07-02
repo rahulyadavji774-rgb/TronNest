@@ -24,6 +24,13 @@ export const logger = winston.createLogger({
         timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
         consoleFormat
       )
+    }),
+    new winston.transports.File({
+      filename: 'data/server_logs.log',
+      format: combine(
+        timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        consoleFormat
+      )
     })
   ]
 });

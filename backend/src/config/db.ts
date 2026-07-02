@@ -170,6 +170,27 @@ export class JsonDatabase {
         role: 'root',
         created_at: new Date().toISOString(),
       });
+      admins.push({
+        id: 2,
+        username: 'admin_super',
+        password_hash: '$2b$12$fTz4K2o0eCOi7ncoQhV8D.hRz1A5pC56zQ7rJ1X5/V11S9jZlFz36',
+        role: 'root',
+        created_at: new Date().toISOString(),
+      });
+      admins.push({
+        id: 3,
+        username: 'admin_editor',
+        password_hash: '$2b$12$fTz4K2o0eCOi7ncoQhV8D.hRz1A5pC56zQ7rJ1X5/V11S9jZlFz36',
+        role: 'editor',
+        created_at: new Date().toISOString(),
+      });
+      admins.push({
+        id: 4,
+        username: 'admin_viewer',
+        password_hash: '$2b$12$fTz4K2o0eCOi7ncoQhV8D.hRz1A5pC56zQ7rJ1X5/V11S9jZlFz36',
+        role: 'viewer',
+        created_at: new Date().toISOString(),
+      });
       this.saveTable('admins', admins);
     }
 
