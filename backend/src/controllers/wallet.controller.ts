@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 import { Response } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
@@ -7,6 +8,7 @@ import { JsonDatabase } from '../config/db';
 import { TronService, withRetry } from '../services/tron.service';
 import { decrypt, encrypt } from '../utils/crypto';
 import { logger } from '../utils/logger';
+import { verifyPasscodeWithRateLimit } from '../utils/security';
 
 export class WalletController {
   private db = JsonDatabase.getInstance();
@@ -19,13 +21,13 @@ export class WalletController {
   /**
    * Remove every cached balance after a successful transaction to prevent stale state
    */
-  private clearBlockchainCache(walletId: number) {
+  private async clearBlockchainCache(walletId: string) {
     try {
-      const tokens = this.db.findMany<any>('tokens', t => !t.is_internal);
+      const tokens = await this.db.findMany<any>('tokens', t => !t.is_internal);
       for (const token of tokens) {
-        const balRecord = this.db.findOne<any>('balances', b => b.wallet_id === walletId && b.token_id === token.id);
+        const balRecord = await this.db.findOne<any>('balances', { wallet_id: walletId, token_id: token.id });
         if (balRecord) {
-          this.db.delete('balances', balRecord.id);
+          await this.db.delete('balances', balRecord.id);
         }
       }
     } catch (err) {
@@ -40,16 +42,16 @@ export class WalletController {
     const user = req.user!;
     logger.info(`[Portfolio API - Server] Starting portfolio fetch for user wallet: ${user.address} (Wallet ID: ${user.walletId})`);
     try {
-      const wallet = this.db.findById<any>('wallets', user.walletId);
+      const wallet = await this.db.findById<any>('wallets', user.walletId);
       const activeAddress = wallet ? wallet.address : user.address;
 
       // Automatically fix any mismatch between user.address and wallet.address if different
       if (wallet && wallet.address !== user.address) {
         logger.warn(`[Address Mismatch Fix] user.address (${user.address}) != wallet.address (${wallet.address}). Syncing user.address to wallet.address.`);
         user.address = wallet.address;
-        const dbUser = this.db.findOne<any>('users', u => u.id === user.id);
+        const dbUser = await this.db.findOne<any>('users', { id: user.id });
         if (dbUser && dbUser.address !== wallet.address) {
-          this.db.update('users', dbUser.id, { address: wallet.address });
+          await this.db.update<any>('users', dbUser.id, { address: wallet.address });
         }
       }
 
@@ -125,7 +127,7 @@ export class WalletController {
           priceApiFailed = true;
           logger.warn('[Portfolio API - Server] All price APIs failed. Utilizing cached token prices.');
           // Use cached price if API fails
-          const prices = this.db.query<any>('token_prices');
+          const prices = await this.db.query<any>('token_prices');
           const trxPriceObj = prices.find((p: any) => p.token_id === 1);
           if (trxPriceObj) {
             liveTrxPrice = parseFloat(trxPriceObj.price_usd);
@@ -137,8 +139,8 @@ export class WalletController {
       }
 
       // 2. Query visible tokens from DB
-      const dbTokens = this.db.findMany<any>('tokens', t => t.is_visible && t.is_active);
-      const prices = this.db.query<any>('token_prices');
+      const dbTokens = await this.db.findMany<any>('tokens', t => t.is_visible && t.is_active);
+      const prices = await this.db.query<any>('token_prices');
 
       const portfolio: any[] = [];
       let totalValueUsd = 0;
@@ -151,7 +153,7 @@ export class WalletController {
           priceUsd = liveTrxPrice;
           const trxPriceObj = prices.find((p: any) => p.token_id === token.id);
           if (trxPriceObj) {
-            this.db.update('token_prices', trxPriceObj.id, { price_usd: liveTrxPrice });
+            await this.db.update<any>('token_prices', trxPriceObj.id, { price_usd: liveTrxPrice });
           }
         } else {
           const priceObj = prices.find((p: any) => p.token_id === token.id);
@@ -160,11 +162,11 @@ export class WalletController {
 
         if (token.is_internal) {
           // Query internal balance from DB
-          const balRecord = this.db.findOne<any>('balances', b => b.wallet_id === user.walletId && b.token_id === token.id);
+          const balRecord = await this.db.findOne<any>('balances', { wallet_id: user.walletId, token_id: token.id });
           balance = balRecord ? parseFloat(balRecord.balance) : 0.0;
         } else {
           // Check if balance sync failed. If it failed, use previous cached balance!
-          const balRecord = this.db.findOne<any>('balances', b => b.wallet_id === user.walletId && b.token_id === token.id);
+          const balRecord = await this.db.findOne<any>('balances', { wallet_id: user.walletId, token_id: token.id });
           const cachedBalance = balRecord ? parseFloat(balRecord.balance) : 0.0;
 
           if (liveBalances.failed) {
@@ -176,9 +178,9 @@ export class WalletController {
 
             // Update cache in DB
             if (balRecord) {
-              this.db.update('balances', balRecord.id, { balance: balance });
+              await this.db.update<any>('balances', balRecord.id, { balance: balance });
             } else {
-              this.db.insert<any>('balances', { wallet_id: user.walletId, token_id: token.id, balance: balance });
+              await this.db.insert<any>('balances', { wallet_id: user.walletId, token_id: token.id, balance: balance });
             }
           }
         }
@@ -223,10 +225,10 @@ export class WalletController {
    */
   public transferAssets = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
-    const { tokenSymbol, recipientAddress, amount, passcode } = req.body;
+    const { tokenId, recipientAddress, amount, passcode } = req.body;
 
-    if (!tokenSymbol || !recipientAddress || !amount || !passcode) {
-      return res.status(400).json({ success: false, message: 'Recipient, amount, asset symbol, and passcode are required' });
+    if (!tokenId || !recipientAddress || !amount || !passcode) {
+      return res.status(400).json({ success: false, message: 'Recipient, amount, token ID, and passcode are required' });
     }
 
     const numAmount = parseFloat(amount);
@@ -236,21 +238,18 @@ export class WalletController {
 
     try {
       // 1. Verify Passcode
-      const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === user.walletId);
-      if (!security) {
-        return res.status(404).json({ success: false, message: 'Wallet security profile missing' });
-      }
-
-      const isPasscodeCorrect = await bcrypt.compare(passcode, security.passcode_hash);
-      if (!isPasscodeCorrect) {
-        return res.status(401).json({ success: false, message: 'Incorrect 6-digit transaction passcode' });
+      const verifyRes = await verifyPasscodeWithRateLimit(user.walletId, passcode);
+      if (!verifyRes.success) {
+        return res.status(verifyRes.status!).json({ success: false, message: verifyRes.message });
       }
 
       // 2. Fetch Token from DB
-      const token = this.db.findOne<any>('tokens', t => t.symbol === tokenSymbol && t.is_active);
-      if (!token) {
-        return res.status(404).json({ success: false, message: `Token ${tokenSymbol} not found or deactivated` });
+      const token = await this.db.findById<any>('tokens', tokenId);
+      if (!token || !token.is_active) {
+        return res.status(404).json({ success: false, message: `Token not found or deactivated` });
       }
+
+      const tokenSymbol = token.symbol;
 
       if (!token.is_transfer_enabled) {
         return res.status(403).json({ success: false, message: `Transfers are currently disabled for ${tokenSymbol}` });
@@ -259,7 +258,7 @@ export class WalletController {
       // 3. Perform transfer based on asset structure
       if (token.is_internal) {
         // --- INTERNAL LEDGER TRANSFER ---
-        const recipientWallet = this.db.findOne<any>('wallets', w => w.address === recipientAddress);
+        const recipientWallet = await this.db.findOne<any>('wallets', { address: recipientAddress });
         if (!recipientWallet) {
           return res.status(404).json({ success: false, message: 'Recipient wallet address does not exist in the database' });
         }
@@ -268,7 +267,7 @@ export class WalletController {
           return res.status(400).json({ success: false, message: 'Cannot transfer assets to your own address' });
         }
 
-        const senderBalanceRecord = this.db.findOne<any>('balances', b => b.wallet_id === user.walletId && b.token_id === token.id);
+        const senderBalanceRecord = await this.db.findOne<any>('balances', { wallet_id: user.walletId, token_id: token.id });
         const senderBalance = senderBalanceRecord ? parseFloat(senderBalanceRecord.balance) : 0;
 
         if (senderBalanceRecord && senderBalanceRecord.is_frozen) {
@@ -279,54 +278,85 @@ export class WalletController {
           return res.status(400).json({ success: false, message: 'Insufficient internal balance' });
         }
 
-        // Deduct from sender
-        this.db.update('balances', senderBalanceRecord.id, { balance: senderBalance - numAmount });
+        const txHash = '0x' + crypto.randomBytes(32).toString('hex');
 
-        // Add to recipient
-        const recipientBalanceRecord = this.db.findOne<any>('balances', b => b.wallet_id === recipientWallet.id && b.token_id === token.id);
-        if (recipientBalanceRecord) {
-          const recipientBalance = parseFloat(recipientBalanceRecord.balance);
-          this.db.update('balances', recipientBalanceRecord.id, { balance: recipientBalance + numAmount });
-        } else {
-          this.db.insert<any>('balances', { wallet_id: recipientWallet.id, token_id: token.id, balance: numAmount });
-        }
+        await this.db.transaction(async (tx) => {
+          // Deduct from sender
+          await this.db.update<any>('balances', senderBalanceRecord.id, { balance: senderBalance - numAmount }, tx);
+
+          // Add to recipient
+          const recipientBalanceRecord = await this.db.findOne<any>('balances', { wallet_id: recipientWallet.id, token_id: token.id }, tx);
+          if (recipientBalanceRecord) {
+            const recipientBalance = parseFloat(recipientBalanceRecord.balance);
+            await this.db.update<any>('balances', recipientBalanceRecord.id, { balance: recipientBalance + numAmount }, tx);
+          } else {
+            await this.db.insert<any>('balances', { wallet_id: recipientWallet.id, token_id: token.id, balance: numAmount }, tx);
+          }
+        });
+        const blockHeight = Math.floor(Math.random() * 50000) + 1000000;
+        const nonce = Math.floor(Math.random() * 100);
+        const gasUsed = 289;
 
         // Insert into internal ledger
-        const ledger = this.db.insert<any>('internal_ledger', {
+        const ledger = await this.db.insert<any>('internal_ledger', {
           from_wallet_id: user.walletId,
           to_wallet_id: recipientWallet.id,
           token_id: token.id,
           amount: numAmount,
-          description: `Internal P2P transfer of ${numAmount} ${tokenSymbol}`
+          description: `Internal P2P transfer of ${numAmount} ${tokenSymbol}`,
+          tx_hash: txHash,
+          sender_wallet: user.address,
+          receiver_wallet: recipientAddress,
+          token_id_str: token.id,
+          status: 'completed',
+          block_height: blockHeight,
+          nonce: nonce,
+          gas_used: gasUsed,
+          network: 'TronNest',
+          created_at: new Date().toISOString()
         });
 
         // Insert transaction histories
-        const outHistory = this.db.insert<any>('transaction_history', {
+        const outHistory = await this.db.insert<any>('transaction_history', {
           wallet_id: user.walletId,
           type: 'internal',
           direction: 'out',
-          asset_symbol: tokenSymbol,
+          asset_symbol: tokenId,
+          token_id: token.id,
           amount: numAmount,
           counterparty: recipientAddress,
           fee: 0,
           status: 'completed',
-          internal_ledger_id: ledger.id
+          internal_ledger_id: ledger.id,
+          tx_hash: txHash,
+          block_height: blockHeight,
+          nonce: nonce,
+          gas_used: gasUsed,
+          network: 'TronNest',
+          created_at: new Date().toISOString()
         });
 
-        const inHistory = this.db.insert<any>('transaction_history', {
+        const inHistory = await this.db.insert<any>('transaction_history', {
           wallet_id: recipientWallet.id,
           type: 'internal',
           direction: 'in',
-          asset_symbol: tokenSymbol,
+          asset_symbol: tokenId,
+          token_id: token.id,
           amount: numAmount,
           counterparty: user.address,
           fee: 0,
           status: 'completed',
-          internal_ledger_id: ledger.id
+          internal_ledger_id: ledger.id,
+          tx_hash: txHash,
+          block_height: blockHeight,
+          nonce: nonce,
+          gas_used: gasUsed,
+          network: 'TronNest',
+          created_at: new Date().toISOString()
         });
 
         // Add internal Notification for recipient
-        this.db.insert<any>('notifications', {
+        await this.db.insert<any>('notifications', {
           user_id: recipientWallet.user_id,
           title: 'Tokens Received',
           message: `You received ${numAmount} ${tokenSymbol} from ${user.address.slice(0, 6)}...${user.address.slice(-4)}`
@@ -336,7 +366,7 @@ export class WalletController {
           success: true,
           message: `Successfully transferred ${numAmount} ${tokenSymbol} internally`,
           data: {
-            txHash: null,
+            txHash: txHash,
             internalLedgerId: ledger.id,
             historyId: outHistory.id
           }
@@ -344,7 +374,7 @@ export class WalletController {
       } else {
         // --- REAL BLOCKCHAIN TRANSFER (TRON) ---
         // Fetch sender's encrypted private key
-        const wallet = this.db.findById<any>('wallets', user.walletId);
+        const wallet = await this.db.findById<any>('wallets', user.walletId);
         if (!wallet) {
           return res.status(500).json({ success: false, message: 'Sender credentials unavailable' });
         }
@@ -362,7 +392,7 @@ export class WalletController {
         }
 
         // Cache blockchain transaction record in DB
-        const bcTx = this.db.insert<any>('blockchain_transactions', {
+        const bcTx = await this.db.insert<any>('blockchain_transactions', {
           wallet_id: user.walletId,
           tx_hash: txResult.txHash,
           token_id: token.id,
@@ -374,11 +404,12 @@ export class WalletController {
         });
 
         // Write to TransactionHistory
-        const history = this.db.insert<any>('transaction_history', {
+        const history = await this.db.insert<any>('transaction_history', {
           wallet_id: user.walletId,
           type: 'blockchain',
           direction: 'out',
-          asset_symbol: tokenSymbol,
+          asset_symbol: tokenId,
+          token_id: token.id,
           amount: numAmount,
           counterparty: recipientAddress,
           fee: txResult.fee,
@@ -388,13 +419,14 @@ export class WalletController {
         });
 
         // If recipient is an internal wallet, generate a matching incoming transaction history for them too!
-        const internalRecipient = this.db.findOne<any>('wallets', w => w.address === recipientAddress);
+        const internalRecipient = await this.db.findOne<any>('wallets', { address: recipientAddress });
         if (internalRecipient) {
-          this.db.insert<any>('transaction_history', {
+          await this.db.insert<any>('transaction_history', {
             wallet_id: internalRecipient.id,
             type: 'blockchain',
             direction: 'in',
-            asset_symbol: tokenSymbol,
+            asset_symbol: tokenId,
+          token_id: token.id,
             amount: numAmount,
             counterparty: user.address,
             fee: 0,
@@ -403,7 +435,7 @@ export class WalletController {
             blockchain_tx_id: bcTx.id
           });
 
-          this.db.insert<any>('notifications', {
+          await this.db.insert<any>('notifications', {
             user_id: internalRecipient.user_id,
             title: 'Blockchain Deposit Confirmed',
             message: `Your wallet received a transfer of ${numAmount} ${tokenSymbol} on the TRON network.`
@@ -436,11 +468,11 @@ export class WalletController {
     const user = req.user!;
     logger.info(`[History API - Server] Fetching history for user address: ${user.address}`);
     try {
-      const wallet = this.db.findById<any>('wallets', user.walletId);
+      const wallet = await this.db.findById<any>('wallets', user.walletId);
       const activeAddress = wallet ? wallet.address : user.address;
 
       // 1. Get all transaction history currently in the local DB
-      const localHistory = this.db.findMany<any>('transaction_history', h => h.wallet_id === user.walletId);
+      const localHistory = await this.db.findMany<any>('transaction_history', { wallet_id: user.walletId });
 
       // We'll build the active list of blockchain transactions
       let onChainHistoryList: any[] = [];
@@ -474,7 +506,7 @@ export class WalletController {
             const trxResponse = await withRetry(async () => {
               const res = await fetch(trxUrl, { headers: fetchHeaders, signal: controller.signal });
               if (res.status === 429) {
-                throw new Error('429 Rate Limit Exceeded');
+                throw new Error('External API Overloaded');
               }
               return res;
             }, 3, 300, 'TRX history fetch');
@@ -485,7 +517,7 @@ export class WalletController {
             const trc20Response = await withRetry(async () => {
               const res = await fetch(trc20Url, { headers: fetchHeaders, signal: controller.signal });
               if (res.status === 429) {
-                throw new Error('429 Rate Limit Exceeded');
+                throw new Error('External API Overloaded');
               }
               return res;
             }, 3, 300, 'TRC20 history fetch');
@@ -502,7 +534,7 @@ export class WalletController {
 
             // Parse standard TRX transactions
             if (Array.isArray(trxData.data)) {
-              const tronWeb = this.tronService.getTronWebInstance();
+              const tronWeb = await this.tronService.getTronWebInstance();
               for (const tx of trxData.data) {
                 try {
                   if (tx.raw_data && tx.raw_data.contract && tx.raw_data.contract[0]) {
@@ -526,7 +558,7 @@ export class WalletController {
                         const createdAt = new Date(tx.block_timestamp || tx.raw_data.timestamp).toISOString();
 
                         // Insert or update in local database to cache this transaction
-                        const existing = this.db.findOne<any>('transaction_history', h => h.tx_hash === txId);
+                        const existing = await this.db.findOne<any>('transaction_history', { tx_hash: txId });
                         const txRecord = {
                           wallet_id: user.walletId,
                           type: 'blockchain',
@@ -541,7 +573,7 @@ export class WalletController {
                         };
 
                         if (!existing) {
-                          this.db.insert<any>('transaction_history', txRecord);
+                          await this.db.insert<any>('transaction_history', txRecord);
                         }
 
                         list.push({
@@ -575,7 +607,7 @@ export class WalletController {
                       const createdAt = new Date(tx.block_timestamp).toISOString();
 
                       // Insert or update in local database to cache this transaction
-                      const existing = this.db.findOne<any>('transaction_history', h => h.tx_hash === txId);
+                      const existing = await this.db.findOne<any>('transaction_history', { tx_hash: txId });
                       const txRecord = {
                         wallet_id: user.walletId,
                         type: 'blockchain',
@@ -590,7 +622,7 @@ export class WalletController {
                       };
 
                       if (!existing) {
-                        this.db.insert<any>('transaction_history', txRecord);
+                        await this.db.insert<any>('transaction_history', txRecord);
                       }
 
                       list.push({
@@ -674,7 +706,7 @@ export class WalletController {
   public getNotifications = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const notifications = this.db.findMany<any>('notifications', n => n.user_id === user.id);
+      const notifications = await this.db.findMany<any>('notifications', { user_id: user.id });
       return res.status(200).json({
         success: true,
         data: notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -690,9 +722,9 @@ export class WalletController {
   public readNotifications = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const notifications = this.db.findMany<any>('notifications', n => n.user_id === user.id && !n.is_read);
+      const notifications = await this.db.findMany<any>('notifications', { user_id: user.id, is_read: false });
       for (const n of notifications) {
-        this.db.update('notifications', n.id, { is_read: true });
+        await this.db.update<any>('notifications', n.id, { is_read: true });
       }
       return res.status(200).json({ success: true, message: 'All notifications cleared' });
     } catch (e: any) {
@@ -706,7 +738,7 @@ export class WalletController {
   public getWalletDetails = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const wallet = this.db.findOne<any>('wallets', w => w.id === user.walletId);
+      const wallet = await this.db.findOne<any>('wallets', { id: user.walletId });
       if (!wallet) {
         return res.status(404).json({ success: false, message: 'Wallet not found' });
       }
@@ -732,7 +764,7 @@ export class WalletController {
   public getTrxBalance = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const wallet = this.db.findById<any>('wallets', user.walletId);
+      const wallet = await this.db.findById<any>('wallets', user.walletId);
       const activeAddress = wallet ? wallet.address : user.address;
       const liveBalances = await this.tronService.getBalances(activeAddress);
       return res.status(200).json({
@@ -754,7 +786,7 @@ export class WalletController {
   public getUsdtBalance = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const wallet = this.db.findById<any>('wallets', user.walletId);
+      const wallet = await this.db.findById<any>('wallets', user.walletId);
       const activeAddress = wallet ? wallet.address : user.address;
       const liveBalances = await this.tronService.getBalances(activeAddress);
       return res.status(200).json({
@@ -776,7 +808,7 @@ export class WalletController {
   public getResources = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const wallet = this.db.findById<any>('wallets', user.walletId);
+      const wallet = await this.db.findById<any>('wallets', user.walletId);
       const activeAddress = wallet ? wallet.address : user.address;
       const bypassCache = req.query.refresh === 'true';
       const resData = await this.tronService.getAccountResources(activeAddress, bypassCache);
@@ -807,17 +839,12 @@ export class WalletController {
 
     try {
       // Verify passcode
-      const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === user.walletId);
-      if (!security) {
-        return res.status(404).json({ success: false, message: 'Wallet security profile missing' });
+      const verifyRes = await verifyPasscodeWithRateLimit(user.walletId, passcode);
+      if (!verifyRes.success) {
+        return res.status(verifyRes.status!).json({ success: false, message: verifyRes.message });
       }
 
-      const isPasscodeCorrect = await bcrypt.compare(passcode, security.passcode_hash);
-      if (!isPasscodeCorrect) {
-        return res.status(401).json({ success: false, message: 'Incorrect 6-digit passcode' });
-      }
-
-      const wallet = this.db.findById<any>('wallets', user.walletId);
+      const wallet = await this.db.findById<any>('wallets', user.walletId);
       if (!wallet) {
         return res.status(500).json({ success: false, message: 'Credentials unavailable' });
       }
@@ -825,10 +852,10 @@ export class WalletController {
       const privateKey = decrypt(wallet.encrypted_private_key);
       const txResult = await this.tronService.transferTrx(privateKey, recipientAddress, numAmount);
 
-      const token = this.db.findOne<any>('tokens', t => t.symbol === 'TRX');
+      const token = await this.db.findOne<any>('tokens', { symbol: 'TRX' });
 
       // Cache blockchain transaction record in DB
-      const bcTx = this.db.insert<any>('blockchain_transactions', {
+      const bcTx = await this.db.insert<any>('blockchain_transactions', {
         wallet_id: user.walletId,
         tx_hash: txResult.txHash,
         token_id: token ? token.id : 1,
@@ -840,7 +867,7 @@ export class WalletController {
       });
 
       // Write to TransactionHistory
-      const history = this.db.insert<any>('transaction_history', {
+      const history = await this.db.insert<any>('transaction_history', {
         wallet_id: user.walletId,
         type: 'blockchain',
         direction: 'out',
@@ -889,17 +916,12 @@ export class WalletController {
 
     try {
       // Verify passcode
-      const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === user.walletId);
-      if (!security) {
-        return res.status(404).json({ success: false, message: 'Wallet security profile missing' });
+      const verifyRes = await verifyPasscodeWithRateLimit(user.walletId, passcode);
+      if (!verifyRes.success) {
+        return res.status(verifyRes.status!).json({ success: false, message: verifyRes.message });
       }
 
-      const isPasscodeCorrect = await bcrypt.compare(passcode, security.passcode_hash);
-      if (!isPasscodeCorrect) {
-        return res.status(401).json({ success: false, message: 'Incorrect 6-digit passcode' });
-      }
-
-      const wallet = this.db.findById<any>('wallets', user.walletId);
+      const wallet = await this.db.findById<any>('wallets', user.walletId);
       if (!wallet) {
         return res.status(500).json({ success: false, message: 'Credentials unavailable' });
       }
@@ -907,10 +929,10 @@ export class WalletController {
       const privateKey = decrypt(wallet.encrypted_private_key);
       const txResult = await this.tronService.transferUsdt(privateKey, recipientAddress, numAmount);
 
-      const token = this.db.findOne<any>('tokens', t => t.symbol === 'USDT');
+      const token = await this.db.findOne<any>('tokens', { symbol: 'USDT' });
 
       // Cache blockchain transaction record in DB
-      const bcTx = this.db.insert<any>('blockchain_transactions', {
+      const bcTx = await this.db.insert<any>('blockchain_transactions', {
         wallet_id: user.walletId,
         tx_hash: txResult.txHash,
         token_id: token ? token.id : 2,
@@ -922,7 +944,7 @@ export class WalletController {
       });
 
       // Write to TransactionHistory
-      const history = this.db.insert<any>('transaction_history', {
+      const history = await this.db.insert<any>('transaction_history', {
         wallet_id: user.walletId,
         type: 'blockchain',
         direction: 'out',
@@ -958,9 +980,9 @@ export class WalletController {
    */
   public broadcastTransaction = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
-    const { signedTx, passcode, recipientAddress, amount, tokenSymbol } = req.body;
+    const { signedTx, passcode, recipientAddress, amount, tokenId } = req.body;
 
-    if (!signedTx || !passcode || !recipientAddress || !amount || !tokenSymbol) {
+    if (!signedTx || !passcode || !recipientAddress || !amount || !tokenId) {
       return res.status(400).json({ success: false, message: 'Missing required parameters for broadcasting' });
     }
 
@@ -968,23 +990,19 @@ export class WalletController {
 
     try {
       // Verify passcode
-      const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === user.walletId);
-      if (!security) {
-        return res.status(404).json({ success: false, message: 'Wallet security profile missing' });
-      }
-
-      const isPasscodeCorrect = await bcrypt.compare(passcode, security.passcode_hash);
-      if (!isPasscodeCorrect) {
-        return res.status(401).json({ success: false, message: 'Incorrect 6-digit passcode' });
+      const verifyRes = await verifyPasscodeWithRateLimit(user.walletId, passcode);
+      if (!verifyRes.success) {
+        return res.status(verifyRes.status!).json({ success: false, message: verifyRes.message });
       }
 
       // Broadcast using TronService
       const txResult = await this.tronService.broadcastSignedTransaction(signedTx);
 
-      const token = this.db.findOne<any>('tokens', t => t.symbol === tokenSymbol);
+      const token = await this.db.findById<any>('tokens', tokenId);
+      const tokenSymbol = token ? token.symbol : (tokenId === 1 ? 'TRX' : 'USDT');
 
       // Cache blockchain transaction record in DB
-      const bcTx = this.db.insert<any>('blockchain_transactions', {
+      const bcTx = await this.db.insert<any>('blockchain_transactions', {
         wallet_id: user.walletId,
         tx_hash: txResult.txHash,
         token_id: token ? token.id : (tokenSymbol === 'TRX' ? 1 : 2),
@@ -996,11 +1014,12 @@ export class WalletController {
       });
 
       // Write to TransactionHistory
-      const history = this.db.insert<any>('transaction_history', {
+      const history = await this.db.insert<any>('transaction_history', {
         wallet_id: user.walletId,
         type: 'blockchain',
         direction: 'out',
-        asset_symbol: tokenSymbol,
+        asset_symbol: tokenId,
+          token_id: token.id,
         amount: numAmount,
         counterparty: recipientAddress,
         fee: txResult.fee,
@@ -1036,7 +1055,7 @@ export class WalletController {
       return res.status(400).json({ success: false, message: 'Address is required' });
     }
     try {
-      const tronWeb = this.tronService.getTronWebInstance();
+      const tronWeb = await this.tronService.getTronWebInstance();
       const acc = await tronWeb.trx.getAccount(address);
       const isActivated = !!(acc && acc.address);
       return res.status(200).json({ success: true, isActivated });
@@ -1058,15 +1077,15 @@ export class WalletController {
       
       // Update transaction status in local database if it's confirmed or failed
       if (result.status !== 'pending') {
-        const bcTx = this.db.findOne<any>('blockchain_transactions', t => t.tx_hash === txId);
+        const bcTx = await this.db.findOne<any>('blockchain_transactions', { tx_hash: txId });
         if (bcTx) {
-          this.db.update('blockchain_transactions', bcTx.id, {
+          await this.db.update<any>('blockchain_transactions', bcTx.id, {
             status: result.status === 'confirmed' ? 'confirmed' : 'failed'
           });
         }
-        const hist = this.db.findOne<any>('transaction_history', t => t.tx_hash === txId);
+        const hist = await this.db.findOne<any>('transaction_history', { tx_hash: txId });
         if (hist) {
-          this.db.update('transaction_history', hist.id, {
+          await this.db.update<any>('transaction_history', hist.id, {
             status: result.status === 'confirmed' ? 'completed' : 'failed'
           });
         }
@@ -1079,30 +1098,87 @@ export class WalletController {
   };
 
   /**
+   * Get transaction details by hash (supports future TronNestScan)
+   */
+  public getTransactionByHash = async (req: AuthenticatedRequest, res: Response) => {
+    const { hash } = req.params;
+    if (!hash) {
+      return res.status(400).json({ success: false, message: 'Transaction hash is required' });
+    }
+    try {
+      const tx = await this.db.findOne<any>('transaction_history', { tx_hash: hash });
+      if (!tx) {
+        return res.status(404).json({ success: false, message: 'Transaction not found' });
+      }
+
+      // If it's a TronNest transaction, let's augment it with all metadata
+      if (tx.type === 'internal') {
+        const ledger = await this.db.findOne<any>('internal_ledger', { tx_hash: hash });
+        return res.status(200).json({
+          success: true,
+          data: {
+            txHash: tx.tx_hash,
+            sender_address: tx.direction === 'out' ? (await this.db.findById<any>('wallets', tx.wallet_id))?.address || tx.wallet_id : tx.counterparty,
+            receiver_address: tx.direction === 'out' ? tx.counterparty : (await this.db.findById<any>('wallets', tx.wallet_id))?.address || tx.wallet_id,
+            token: tx.asset_symbol,
+            tokenId: ledger?.token_id || tx.token_id,
+            amount: tx.amount,
+            timestamp: tx.created_at || ledger?.created_at,
+            status: tx.status || 'completed',
+            blockHeight: tx.block_height || ledger?.block_height || 1024506,
+            nonce: tx.nonce !== undefined ? tx.nonce : (ledger?.nonce !== undefined ? ledger.nonce : 12),
+            gasUsed: tx.gas_used || ledger?.gas_used || 289,
+            network: tx.network || ledger?.network || 'TronNest'
+          }
+        });
+      }
+
+      // If it is a blockchain transaction, return its standard details
+      return res.status(200).json({
+        success: true,
+        data: {
+          txHash: tx.tx_hash,
+          sender_address: tx.direction === 'out' ? (await this.db.findById<any>('wallets', tx.wallet_id))?.address || tx.wallet_id : tx.counterparty,
+          receiver_address: tx.direction === 'out' ? tx.counterparty : (await this.db.findById<any>('wallets', tx.wallet_id))?.address || tx.wallet_id,
+          token: tx.asset_symbol,
+          amount: tx.amount,
+          timestamp: tx.created_at,
+          status: tx.status || 'completed',
+          network: 'TRON Mainnet'
+        }
+      });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, message: 'Failed to retrieve transaction details' });
+    }
+  };
+
+  /**
    * Get the decrypted private key and seed phrase for secure client-side storage
    */
   public getPrivateKey = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
-    const { passcode } = req.body;
+    const { passcode, walletId } = req.body;
     if (!passcode) {
       return res.status(400).json({ success: false, message: 'Passcode is required' });
     }
     try {
-      // Verify passcode
-      const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === user.walletId);
-      if (!security) {
-        return res.status(404).json({ success: false, message: 'Wallet security profile missing' });
+      const wId = walletId ? parseInt(walletId) : user.walletId;
+      if (!wId) {
+        return res.status(400).json({ success: false, message: 'Wallet ID is required' });
       }
-      const isPasscodeCorrect = await bcrypt.compare(passcode, security.passcode_hash);
-      if (!isPasscodeCorrect) {
-        return res.status(401).json({ success: false, message: 'Incorrect 6-digit passcode' });
+
+      // Verify passcode using verifyPasscodeWithRateLimit
+      const verifyRes = await verifyPasscodeWithRateLimit(user.id, passcode);
+      if (!verifyRes.success) {
+        return res.status(verifyRes.status || 401).json({ success: false, message: verifyRes.message || 'Incorrect PIN' });
       }
-      const wallet = this.db.findById<any>('wallets', user.walletId);
+
+      const wallet = await this.db.findOne<any>('wallets', { id: wId, user_id: user.id });
       if (!wallet) {
         return res.status(404).json({ success: false, message: 'Wallet credentials unavailable' });
       }
       const privateKey = decrypt(wallet.encrypted_private_key);
-      const seedPhrase = decrypt(wallet.encrypted_seed);
+      const seedPhrase = wallet.encrypted_seed ? decrypt(wallet.encrypted_seed) : null;
       return res.status(200).json({ success: true, privateKey, seedPhrase });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to retrieve credentials securely' });
@@ -1276,9 +1352,9 @@ export class WalletController {
       }
 
       // 2. Fetch custom token prices from DB table `token_prices` and compute supplies
-      const dbPrices = this.db.query<any>('token_prices');
-      const dbTokens = this.db.query<any>('tokens');
-      const balances = this.db.query<any>('balances');
+      const dbPrices = await this.db.query<any>('token_prices');
+      const dbTokens = await this.db.query<any>('tokens');
+      const balances = await this.db.query<any>('balances');
 
       // Nest Dollar config
       const mUSDToken = dbTokens.find((t: any) => t.symbol === 'mUSD');
@@ -1308,15 +1384,15 @@ export class WalletController {
       // 3. Update the `token_prices` database with the latest fetched public prices to ensure consistency
       const trxPriceObj = dbPrices.find((p: any) => p.token_id === 1);
       if (trxPriceObj) {
-        this.db.update('token_prices', trxPriceObj.id, { price_usd: trxPrice, updated_at: new Date().toISOString() });
+        await this.db.update<any>('token_prices', trxPriceObj.id, { price_usd: trxPrice, updated_at: new Date().toISOString() });
       }
       const usdtPriceObj = dbPrices.find((p: any) => p.token_id === 2);
       if (usdtPriceObj) {
-        this.db.update('token_prices', usdtPriceObj.id, { price_usd: usdtPrice, updated_at: new Date().toISOString() });
+        await this.db.update<any>('token_prices', usdtPriceObj.id, { price_usd: usdtPrice, updated_at: new Date().toISOString() });
       }
 
       // Aggregate all market data records
-      const marketData = [
+      const marketData: any[] = [
         {
           id: 1,
           name: 'TRON',
@@ -1350,42 +1426,41 @@ export class WalletController {
           sparkline: usdtSparkline,
           history30d: usdtHistory30d,
           isInternal: false
-        },
-        {
-          id: 3,
-          name: 'Nest Dollar',
-          symbol: 'mUSD',
-          logoUrl: mUSDToken?.logo_url || 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=200&auto=format&fit=crop',
-          priceUsd: musdPrice,
-          change24h: -0.01,
-          marketCap: musdPrice * (musdCircSupply || 500000),
-          volume24h: 1240,
-          circulatingSupply: musdCircSupply || 500000,
-          totalSupply: 10000000,
-          ath: 1.05,
-          atl: 0.95,
-          sparkline: musdSparkline,
-          history30d: musdHistory30d,
-          isInternal: true
-        },
-        {
-          id: 4,
-          name: 'Gold Nest',
-          symbol: 'GOLD',
-          logoUrl: goldToken?.logo_url || 'https://images.unsplash.com/photo-1610375228911-2f073259b662?q=80&w=200&auto=format&fit=crop',
-          priceUsd: goldPrice,
-          change24h: 0.42,
-          marketCap: goldPrice * (goldCircSupply || 25000),
-          volume24h: 18450,
-          circulatingSupply: goldCircSupply || 25000,
-          totalSupply: 1000000,
-          ath: 85.00,
-          atl: 55.00,
-          sparkline: goldSparkline,
-          history30d: goldHistory30d,
-          isInternal: true
         }
       ];
+
+      // Add dynamic tokens
+      for (const t of dbTokens) {
+        if (t.id === 1 || t.id === 2 || !t.is_visible || !t.is_active) continue;
+
+        const pr = dbPrices.find((p: any) => p.token_id === t.id);
+        const price = pr ? parseFloat(pr.price_usd) : 1.0;
+        
+        const circSupply = balances
+          .filter((b: any) => b.token_id === t.id)
+          .reduce((sum: number, b: any) => sum + parseFloat(b.balance || '0'), 0);
+
+        const sparkline = seedRandomWalk(price, 24, 0.005, `spark_${t.id}_${todayStr}`);
+        const history30d = seedHistory30d(price, 30, 0.006, `hist_${t.id}_${todayStr}`);
+
+        marketData.push({
+          id: t.id,
+          name: t.name,
+          symbol: t.symbol,
+          logoUrl: t.logo_url || 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=200&auto=format&fit=crop',
+          priceUsd: price,
+          change24h: 0.0,
+          marketCap: price * (circSupply || 100000),
+          volume24h: 0,
+          circulatingSupply: circSupply || 0,
+          totalSupply: t.totalSupply || 1000000,
+          ath: price,
+          atl: price,
+          sparkline,
+          history30d,
+          isInternal: t.is_internal
+        });
+      }
 
       globalMarketCache = {
         timestamp: now,
@@ -1414,8 +1489,8 @@ export class WalletController {
 
       // If no cache exists, use db values for basic info
       try {
-        const dbPrices = this.db.query<any>('token_prices');
-        const dbTokens = this.db.query<any>('tokens');
+        const dbPrices = await this.db.query<any>('token_prices');
+        const dbTokens = await this.db.query<any>('tokens');
         const basicData = dbTokens.map((t: any) => {
           const pr = dbPrices.find((p: any) => p.token_id === t.id);
           const price = pr ? parseFloat(pr.price_usd) : 1.0;
@@ -1458,11 +1533,11 @@ export class WalletController {
     const user = req.user!;
     try {
       const notificationId = parseInt(req.params.id);
-      const notification = this.db.findOne<any>('notifications', n => n.id === notificationId && n.user_id === user.id);
+      const notification = await this.db.findOne<any>('notifications', { id: notificationId, user_id: user.id });
       if (!notification) {
         return res.status(404).json({ success: false, message: 'Notification not found' });
       }
-      this.db.delete('notifications', notification.id);
+      await this.db.delete('notifications', notification.id);
       return res.status(200).json({ success: true, message: 'Notification deleted successfully' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to delete notification' });
@@ -1473,11 +1548,11 @@ export class WalletController {
     const user = req.user!;
     try {
       const notificationId = parseInt(req.params.id);
-      const notification = this.db.findOne<any>('notifications', n => n.id === notificationId && n.user_id === user.id);
+      const notification = await this.db.findOne<any>('notifications', { id: notificationId, user_id: user.id });
       if (!notification) {
         return res.status(404).json({ success: false, message: 'Notification not found' });
       }
-      this.db.update('notifications', notification.id, { is_read: true });
+      await this.db.update<any>('notifications', notification.id, { is_read: true });
       return res.status(200).json({ success: true, message: 'Notification marked as read' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to update notification' });
@@ -1490,10 +1565,10 @@ export class WalletController {
   public listWallets = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const wallets = this.db.findMany<any>('wallets', w => w.user_id === user.id);
-      const tokens = this.db.query<any>('tokens');
-      const prices = this.db.query<any>('token_prices');
-      const userObj = this.db.findById<any>('users', user.id);
+      const wallets = await this.db.findMany<any>('wallets', { user_id: user.id });
+      const tokens = await this.db.query<any>('tokens');
+      const prices = await this.db.query<any>('token_prices');
+      const userObj = await this.db.findById<any>('users', user.id);
       const activeWalletId = userObj ? (userObj.active_wallet_id || userObj.wallet_id) : user.walletId;
 
       const formattedWallets = [];
@@ -1505,7 +1580,7 @@ export class WalletController {
 
         for (const token of tokens) {
           if (!token.is_visible || !token.is_active) continue;
-          const balRecord = this.db.findOne<any>('balances', b => b.wallet_id === w.id && b.token_id === token.id);
+          const balRecord = await this.db.findOne<any>('balances', { wallet_id: w.id, token_id: token.id });
           const balance = balRecord ? parseFloat(balRecord.balance) : 0.0;
           const priceObj = prices.find((p: any) => p.token_id === token.id);
           const priceUsd = priceObj ? parseFloat(priceObj.price_usd) : 0.0;
@@ -1555,7 +1630,7 @@ export class WalletController {
       const encryptedSeed = encrypt(walletData.seedPhrase);
       const encryptedPrivateKey = encrypt(walletData.privateKey);
 
-      const wallet = this.db.insert<any>('wallets', {
+      const wallet = await this.db.insert<any>('wallets', {
         user_id: user.id,
         address: walletData.address,
         encrypted_seed: encryptedSeed,
@@ -1566,34 +1641,16 @@ export class WalletController {
         backup_confirmed: false
       });
 
-      const primaryWallet = this.db.findOne<any>('wallets', w => w.user_id === user.id && w.id !== wallet.id);
-      if (primaryWallet) {
-        const primarySecurity = this.db.findOne<any>('wallet_security', s => s.wallet_id === primaryWallet.id);
-        if (primarySecurity) {
-          this.db.insert<any>('wallet_security', {
-            wallet_id: wallet.id,
-            passcode_hash: primarySecurity.passcode_hash,
-            failed_attempts: 0,
-            locked_until: null,
-            biometrics_enabled: primarySecurity.biometrics_enabled || false,
-            auto_lock_duration: primarySecurity.auto_lock_duration || '5',
-            privacy_mode_enabled: primarySecurity.privacy_mode_enabled || false,
-            screenshot_protection_enabled: primarySecurity.screenshot_protection_enabled || false,
-            clipboard_autoclear_seconds: primarySecurity.clipboard_autoclear_seconds || 30
-          });
-        }
-      }
-
-      const tokens = this.db.query<any>('tokens');
+      const tokens = await this.db.query<any>('tokens');
       for (const t of tokens) {
-        this.db.insert<any>('balances', {
+        await this.db.insert<any>('balances', {
           wallet_id: wallet.id,
           token_id: t.id,
           balance: 0.0
         });
       }
 
-      this.db.insert<any>('notifications', {
+      await this.db.insert<any>('notifications', {
         user_id: user.id,
         title: 'New Wallet Created',
         message: `Wallet "${wallet.name}" successfully created and secured with your PIN.`,
@@ -1643,7 +1700,7 @@ export class WalletController {
         return res.status(400).json({ success: false, message: 'Private key or Seed phrase is required' });
       }
 
-      const existing = this.db.findOne<any>('wallets', w => w.user_id === user.id && w.address === address);
+      const existing = await this.db.findOne<any>('wallets', { user_id: user.id, address: address });
       if (existing) {
         return res.status(400).json({ success: false, message: 'This wallet is already imported under your account.' });
       }
@@ -1651,7 +1708,7 @@ export class WalletController {
       const encryptedSeed = derivedSeedPhrase ? encrypt(derivedSeedPhrase) : null;
       const encryptedPrivateKey = encrypt(derivedPrivateKey);
 
-      const wallet = this.db.insert<any>('wallets', {
+      const wallet = await this.db.insert<any>('wallets', {
         user_id: user.id,
         address: address,
         encrypted_seed: encryptedSeed,
@@ -1662,27 +1719,9 @@ export class WalletController {
         backup_confirmed: true
       });
 
-      const primaryWallet = this.db.findOne<any>('wallets', w => w.user_id === user.id && w.id !== wallet.id);
-      if (primaryWallet) {
-        const primarySecurity = this.db.findOne<any>('wallet_security', s => s.wallet_id === primaryWallet.id);
-        if (primarySecurity) {
-          this.db.insert<any>('wallet_security', {
-            wallet_id: wallet.id,
-            passcode_hash: primarySecurity.passcode_hash,
-            failed_attempts: 0,
-            locked_until: null,
-            biometrics_enabled: primarySecurity.biometrics_enabled || false,
-            auto_lock_duration: primarySecurity.auto_lock_duration || '5',
-            privacy_mode_enabled: primarySecurity.privacy_mode_enabled || false,
-            screenshot_protection_enabled: primarySecurity.screenshot_protection_enabled || false,
-            clipboard_autoclear_seconds: primarySecurity.clipboard_autoclear_seconds || 30
-          });
-        }
-      }
-
-      const tokens = this.db.query<any>('tokens');
+      const tokens = await this.db.query<any>('tokens');
       for (const t of tokens) {
-        this.db.insert<any>('balances', {
+        await this.db.insert<any>('balances', {
           wallet_id: wallet.id,
           token_id: t.id,
           balance: 0.0
@@ -1691,7 +1730,7 @@ export class WalletController {
 
       this.tronService.getBalances(address, true).catch(() => {});
 
-      this.db.insert<any>('notifications', {
+      await this.db.insert<any>('notifications', {
         user_id: user.id,
         title: 'Wallet Imported',
         message: `Wallet "${wallet.name}" successfully imported and integrated.`,
@@ -1719,11 +1758,11 @@ export class WalletController {
       if (!walletId || !name) {
         return res.status(400).json({ success: false, message: 'Wallet ID and Name are required' });
       }
-      const wallet = this.db.findOne<any>('wallets', w => w.id === walletId && w.user_id === user.id);
+      const wallet = await this.db.findOne<any>('wallets', { id: walletId, user_id: user.id });
       if (!wallet) {
         return res.status(404).json({ success: false, message: 'Wallet not found' });
       }
-      this.db.update('wallets', wallet.id, { name });
+      await this.db.update<any>('wallets', wallet.id, { name });
       return res.status(200).json({ success: true, message: 'Wallet renamed successfully' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to rename wallet' });
@@ -1737,14 +1776,14 @@ export class WalletController {
       if (!walletId) {
         return res.status(400).json({ success: false, message: 'Wallet ID is required' });
       }
-      const wallet = this.db.findOne<any>('wallets', w => w.id === walletId && w.user_id === user.id);
+      const wallet = await this.db.findOne<any>('wallets', { id: walletId, user_id: user.id });
       if (!wallet) {
         return res.status(404).json({ success: false, message: 'Wallet not found' });
       }
       const updates: any = {};
       if (color) updates.color = color;
       if (icon) updates.icon = icon;
-      this.db.update('wallets', wallet.id, updates);
+      await this.db.update<any>('wallets', wallet.id, updates);
       return res.status(200).json({ success: true, message: 'Wallet customized successfully' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to customize wallet' });
@@ -1754,18 +1793,45 @@ export class WalletController {
   public switchWallet = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const { walletId } = req.body;
+      const { walletId, passcode } = req.body;
       if (!walletId) {
         return res.status(400).json({ success: false, message: 'Wallet ID is required' });
       }
-      const wallet = this.db.findOne<any>('wallets', w => w.id === walletId && w.user_id === user.id);
+      if (!passcode) {
+        return res.status(400).json({ success: false, message: 'Account PIN verification is required to switch wallets' });
+      }
+
+      const verifyRes = await verifyPasscodeWithRateLimit(user.id, passcode);
+      if (!verifyRes.success) {
+        return res.status(verifyRes.status || 401).json({ success: false, message: verifyRes.message || 'Incorrect PIN' });
+      }
+
+      const wallet = await this.db.findOne<any>('wallets', { id: walletId, user_id: user.id });
       if (!wallet) {
         return res.status(404).json({ success: false, message: 'Wallet not found' });
       }
 
-      const userObj = this.db.findById<any>('users', user.id);
+      const userObj = await this.db.findById<any>('users', user.id);
       if (userObj) {
-        this.db.update('users', user.id, { active_wallet_id: wallet.id, address: wallet.address });
+        await this.db.update<any>('users', user.id, { active_wallet_id: wallet.id, address: wallet.address });
+      }
+
+      // Generate new session JWTs for the switched wallet
+      const JWT_SECRET = process.env.JWT_SECRET || 'TronNest_SuperSecureJWTSalt_2026';
+      const token = jwt.sign(
+        { id: user.id, walletId: wallet.id, address: wallet.address },
+        JWT_SECRET,
+        { expiresIn: '15m' }
+      );
+
+      // We should also update the session token in the database
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const oldToken = authHeader.split(' ')[1];
+        const activeSession = await this.db.findOne<any>('sessions', { token: oldToken });
+        if (activeSession) {
+          await this.db.update<any>('sessions', activeSession.id, { token: token });
+        }
       }
 
       return res.status(200).json({
@@ -1774,7 +1840,8 @@ export class WalletController {
         data: {
           walletId: wallet.id,
           address: wallet.address,
-          name: wallet.name
+          name: wallet.name,
+          token: token
         }
       });
     } catch (e: any) {
@@ -1789,10 +1856,22 @@ export class WalletController {
       if (!walletId) {
         return res.status(400).json({ success: false, message: 'Wallet ID is required' });
       }
+
+      // Read passcode from body, query, or headers
+      const passcode = req.body?.passcode || req.query?.passcode || req.headers['x-passcode'];
+      if (!passcode) {
+        return res.status(400).json({ success: false, message: 'Account PIN is required to remove a wallet.' });
+      }
+
+      // Verify PIN
+      const verifyRes = await verifyPasscodeWithRateLimit(user.id, passcode);
+      if (!verifyRes.success) {
+        return res.status(verifyRes.status || 401).json({ success: false, message: verifyRes.message || 'Incorrect PIN' });
+      }
       
-      const wallets = this.db.findMany<any>('wallets', w => w.user_id === user.id);
+      const wallets = await this.db.findMany<any>('wallets', { user_id: user.id });
       if (wallets.length <= 1) {
-         return res.status(400).json({ success: false, message: 'Cannot delete the only wallet on your account.' });
+         return res.status(400).json({ success: false, message: 'At least one wallet must remain in your account.' });
       }
 
       const walletToDelete = wallets.find(w => w.id === walletId);
@@ -1800,29 +1879,29 @@ export class WalletController {
         return res.status(404).json({ success: false, message: 'Wallet not found' });
       }
 
-      this.db.delete('wallets', walletToDelete.id);
+      await this.db.delete('wallets', walletToDelete.id);
       
-      const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === walletToDelete.id);
+      const security = await this.db.findOne<any>('wallet_security', { wallet_id: walletToDelete.id });
       if (security) {
-        this.db.delete('wallet_security', security.id);
+        await this.db.delete('wallet_security', security.id);
       }
 
-      const balances = this.db.findMany<any>('balances', b => b.wallet_id === walletToDelete.id);
+      const balances = await this.db.findMany<any>('balances', { wallet_id: walletToDelete.id });
       for (const b of balances) {
-        this.db.delete('balances', b.id);
+        await this.db.delete('balances', b.id);
       }
 
-      const userObj = this.db.findById<any>('users', user.id);
+      const userObj = await this.db.findById<any>('users', user.id);
       if (userObj && (userObj.active_wallet_id === walletToDelete.id || userObj.wallet_id === walletToDelete.id)) {
         const remainingWallet = wallets.find(w => w.id !== walletToDelete.id)!;
-        this.db.update('users', user.id, { 
+        await this.db.update<any>('users', user.id, { 
           active_wallet_id: remainingWallet.id, 
           address: remainingWallet.address,
           wallet_id: remainingWallet.id
         });
       }
 
-      return res.status(200).json({ success: true, message: 'Wallet deleted successfully' });
+      return res.status(200).json({ success: true, message: 'Wallet removed successfully from local list' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to delete wallet' });
     }
@@ -1835,11 +1914,11 @@ export class WalletController {
       if (!walletId) {
         return res.status(400).json({ success: false, message: 'Wallet ID is required' });
       }
-      const wallet = this.db.findOne<any>('wallets', w => w.id === walletId && w.user_id === user.id);
+      const wallet = await this.db.findOne<any>('wallets', { id: walletId, user_id: user.id });
       if (!wallet) {
         return res.status(404).json({ success: false, message: 'Wallet not found' });
       }
-      this.db.update('wallets', wallet.id, { backup_confirmed: true });
+      await this.db.update<any>('wallets', wallet.id, { backup_confirmed: true });
       return res.status(200).json({ success: true, message: 'Backup confirmed successfully' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to confirm backup' });
@@ -1852,27 +1931,18 @@ export class WalletController {
   public getSecuritySettings = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const security = this.db.findOne<any>('wallet_security', s => s.wallet_id === user.walletId);
-      if (!security) {
-        return res.status(200).json({
-          success: true,
-          data: {
-            biometricsEnabled: false,
-            autoLockDuration: '5',
-            privacyModeEnabled: false,
-            screenshotProtectionEnabled: false,
-            clipboardAutoclearSeconds: 30
-          }
-        });
+      const userObj = await this.db.findById<any>('users', user.id);
+      if (!userObj) {
+        return res.status(404).json({ success: false, message: 'User not found' });
       }
       return res.status(200).json({
         success: true,
         data: {
-          biometricsEnabled: !!security.biometrics_enabled,
-          autoLockDuration: security.auto_lock_duration || '5',
-          privacyModeEnabled: !!security.privacy_mode_enabled,
-          screenshotProtectionEnabled: !!security.screenshot_protection_enabled,
-          clipboardAutoclearSeconds: security.clipboard_autoclear_seconds || 30
+          biometricsEnabled: !!userObj.biometrics_enabled,
+          autoLockDuration: userObj.auto_lock_duration || '5',
+          privacyModeEnabled: !!userObj.privacy_mode_enabled,
+          screenshotProtectionEnabled: !!userObj.screenshot_protection_enabled,
+          clipboardAutoclearSeconds: userObj.clipboard_autoclear_seconds || 30
         }
       });
     } catch (e: any) {
@@ -1884,14 +1954,9 @@ export class WalletController {
     const user = req.user!;
     try {
       const { biometricsEnabled, autoLockDuration, privacyModeEnabled, screenshotProtectionEnabled, clipboardAutoclearSeconds } = req.body;
-      let security = this.db.findOne<any>('wallet_security', s => s.wallet_id === user.walletId);
-      if (!security) {
-        security = this.db.insert<any>('wallet_security', {
-          wallet_id: user.walletId,
-          passcode_hash: '$2b$10$U6Uv6D.uSNoWp6qU8bC/NuQJ43uT5oA/G8p17X7K2vUfOsn2vH1.y',
-          failed_attempts: 0,
-          locked_until: null
-        });
+      const userObj = await this.db.findById<any>('users', user.id);
+      if (!userObj) {
+        return res.status(404).json({ success: false, message: 'User not found' });
       }
 
       const updates: any = {};
@@ -1901,7 +1966,7 @@ export class WalletController {
       if (screenshotProtectionEnabled !== undefined) updates.screenshot_protection_enabled = !!screenshotProtectionEnabled;
       if (clipboardAutoclearSeconds !== undefined) updates.clipboard_autoclear_seconds = parseInt(clipboardAutoclearSeconds);
 
-      this.db.update('wallet_security', security.id, updates);
+      await this.db.update<any>('users', userObj.id, updates);
       return res.status(200).json({ success: true, message: 'Security settings updated' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to update security settings' });
@@ -1911,7 +1976,7 @@ export class WalletController {
   public getLoginHistory = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const logs = this.db.findMany<any>('wallet_logs', l => l.actor_id === user.id);
+      const logs = await this.db.findMany<any>('wallet_logs', { actor_id: user.id });
       return res.status(200).json({
         success: true,
         data: logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 20)
@@ -1925,7 +1990,7 @@ export class WalletController {
     const user = req.user!;
     try {
       const { deviceName, status, ipAddress } = req.body;
-      this.db.insert<any>('wallet_logs', {
+      await this.db.insert<any>('wallet_logs', {
         actor_id: user.id,
         action: 'wallet_unlock',
         status: status || 'success',
@@ -1942,9 +2007,9 @@ export class WalletController {
   public getTrustedDevices = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      let devices = this.db.findMany<any>('devices', d => d.user_id === user.id);
+      let devices = await this.db.findMany<any>('devices', { user_id: user.id });
       if (devices.length === 0) {
-        const current = this.db.insert<any>('devices', {
+        const current = await this.db.insert<any>('devices', {
           user_id: user.id,
           device_name: 'Current Browser Session',
           user_agent: req.headers['user-agent'] || 'Unknown Browser',
@@ -1964,11 +2029,11 @@ export class WalletController {
     const user = req.user!;
     try {
       const deviceId = parseInt(req.params.id);
-      const device = this.db.findOne<any>('devices', d => d.id === deviceId && d.user_id === user.id);
+      const device = await this.db.findOne<any>('devices', { id: deviceId, user_id: user.id });
       if (!device) {
         return res.status(404).json({ success: false, message: 'Device not found' });
       }
-      this.db.delete('devices', device.id);
+      await this.db.delete('devices', device.id);
       return res.status(200).json({ success: true, message: 'Device removed from trusted list' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to remove trusted device' });
@@ -1983,7 +2048,7 @@ export class WalletController {
         return res.status(400).json({ success: false, message: 'Encryption password is required' });
       }
 
-      const wallets = this.db.findMany<any>('wallets', w => w.user_id === user.id);
+      const wallets = await this.db.findMany<any>('wallets', { user_id: user.id });
       const backupData = wallets.map(w => ({
         address: w.address,
         privateKey: decrypt(w.encrypted_private_key),
@@ -2031,13 +2096,13 @@ export class WalletController {
       for (const item of backupData) {
         if (!item.address || !item.privateKey) continue;
 
-        const existing = this.db.findOne<any>('wallets', w => w.user_id === user.id && w.address === item.address);
+        const existing = await this.db.findOne<any>('wallets', { user_id: user.id, address: item.address });
         if (existing) continue;
 
         const encryptedSeed = item.seedPhrase ? encrypt(item.seedPhrase) : null;
         const encryptedPrivateKey = encrypt(item.privateKey);
 
-        const wallet = this.db.insert<any>('wallets', {
+        const wallet = await this.db.insert<any>('wallets', {
           user_id: user.id,
           address: item.address,
           encrypted_seed: encryptedSeed,
@@ -2048,27 +2113,9 @@ export class WalletController {
           backup_confirmed: true
         });
 
-        const primaryWallet = this.db.findOne<any>('wallets', w => w.user_id === user.id && w.id !== wallet.id);
-        if (primaryWallet) {
-          const primarySecurity = this.db.findOne<any>('wallet_security', s => s.wallet_id === primaryWallet.id);
-          if (primarySecurity) {
-            this.db.insert<any>('wallet_security', {
-              wallet_id: wallet.id,
-              passcode_hash: primarySecurity.passcode_hash,
-              failed_attempts: 0,
-              locked_until: null,
-              biometrics_enabled: primarySecurity.biometrics_enabled || false,
-              auto_lock_duration: primarySecurity.auto_lock_duration || '5',
-              privacy_mode_enabled: primarySecurity.privacy_mode_enabled || false,
-              screenshot_protection_enabled: primarySecurity.screenshot_protection_enabled || false,
-              clipboard_autoclear_seconds: primarySecurity.clipboard_autoclear_seconds || 30
-            });
-          }
-        }
-
-        const tokens = this.db.query<any>('tokens');
+        const tokens = await this.db.query<any>('tokens');
         for (const t of tokens) {
-          this.db.insert<any>('balances', {
+          await this.db.insert<any>('balances', {
             wallet_id: wallet.id,
             token_id: t.id,
             balance: 0.0
@@ -2078,7 +2125,7 @@ export class WalletController {
         importedWallets.push(wallet);
       }
 
-      this.db.insert<any>('notifications', {
+      await this.db.insert<any>('notifications', {
         user_id: user.id,
         title: 'Wallets Imported from Backup',
         message: `Successfully restored ${importedWallets.length} wallets from your secure backup file.`,
@@ -2123,3 +2170,4 @@ function decryptWithPassword(encryptedText: string, key: string): string {
 
 let globalMarketCache: { timestamp: number; data: any } | null = null;
 
+export function clearMarketCache() { globalMarketCache = null; }

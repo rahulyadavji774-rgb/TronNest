@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, Plus, Import, Palette, Search, Edit3, Trash2, Check, Copy, 
   AlertTriangle, Key, ShieldCheck, TrendingUp, Sliders, LayoutGrid,
-  TrendingDown, Globe, FolderSync, Wallet, Activity, Briefcase
+  TrendingDown, Globe, FolderSync, Wallet, Activity, Briefcase,
+  Delete, Lock, RefreshCw
 } from 'lucide-react';
 
 interface WalletAsset {
@@ -13,7 +14,7 @@ interface WalletAsset {
 }
 
 interface WalletItem {
-  id: number;
+  id: string;
   address: string;
   name: string;
   color: string;
@@ -29,7 +30,7 @@ interface WalletManagerProps {
   onClose: () => void;
   token: string;
   currentAddress: string;
-  onWalletSwitched: (newAddress: string) => void;
+  onWalletSwitched: (newAddress: string, newToken?: string) => void;
 }
 
 const COLOR_PRESETS = [
@@ -96,6 +97,16 @@ export function WalletManager({
   const [backupSeedPhrase, setBackupSeedPhrase] = useState<string>('');
   const [backupCopied, setBackupCopied] = useState<boolean>(false);
 
+  // Secure Action state (Switch, Backup, or Remove validation with Account PIN)
+  const [secureAction, setSecureAction] = useState<{
+    type: 'switch' | 'backup' | 'remove';
+    wallet: WalletItem;
+  } | null>(null);
+  const [securePin, setSecurePin] = useState('');
+  const [secureError, setSecureError] = useState<string | null>(null);
+  const [secureLoading, setSecureLoading] = useState(false);
+  const [secureShake, setSecureShake] = useState(false);
+
   // Load wallets from list
   const fetchWallets = async () => {
     try {
@@ -140,7 +151,146 @@ export function WalletManager({
   }, [isOpen]);
 
   // Actions
-  const handleSwitch = async (id: number, address: string) => {
+  const handleSwitchRequest = (wallet: WalletItem) => {
+    setSecureAction({ type: 'switch', wallet });
+    setSecurePin('');
+    setSecureError(null);
+    setSecureLoading(false);
+  };
+
+  const handleBackupRequest = (wallet: WalletItem) => {
+    setSecureAction({ type: 'backup', wallet });
+    setSecurePin('');
+    setSecureError(null);
+    setSecureLoading(false);
+  };
+
+  const handleRemoveRequest = (wallet: WalletItem) => {
+    if (wallets.length <= 1) {
+      alert("At least one wallet must remain in your account.");
+      return;
+    }
+    if (wallet.isActive) {
+      alert("Cannot remove the currently active wallet.");
+      return;
+    }
+    if (!confirm(`Warning: Are you absolutely sure you want to remove "${wallet.name}" from the Multi-Wallet list? This will NOT delete it from the blockchain, and you can import it again later using its Seed Phrase or Private Key.`)) {
+      return;
+    }
+    setSecureAction({ type: 'remove', wallet });
+    setSecurePin('');
+    setSecureError(null);
+    setSecureLoading(false);
+  };
+
+  const handleSecurePinSubmit = async (enteredPin: string) => {
+    if (!secureAction) return;
+    setSecureLoading(true);
+    setSecureError(null);
+
+    const { type, wallet } = secureAction;
+
+    if (type === 'switch') {
+      try {
+        const res = await fetch('/api/wallet/switch', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ walletId: wallet.id, passcode: enteredPin })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          onWalletSwitched(wallet.address, data.data?.token);
+          setSecureAction(null);
+          fetchWallets();
+        } else {
+          setSecureError(data.message || 'Incorrect Account PIN');
+          setSecureShake(true);
+          setTimeout(() => setSecureShake(false), 500);
+        }
+      } catch (_) {
+        setSecureError('Connection timed out. Please retry.');
+      } finally {
+        setSecureLoading(false);
+      }
+    } else if (type === 'backup') {
+      try {
+        const res = await fetch('/api/wallet/private-key', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ walletId: wallet.id, passcode: enteredPin })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setBackupRevealWallet(wallet);
+          setBackupPrivateKey(data.privateKey);
+          setBackupSeedPhrase(data.seedPhrase || 'No seed word backup available (Direct Key Import)');
+          setSecureAction(null);
+        } else {
+          setSecureError(data.message || 'Incorrect Account PIN');
+          setSecureShake(true);
+          setTimeout(() => setSecureShake(false), 500);
+        }
+      } catch (_) {
+        setSecureError('Connection timed out. Please retry.');
+      } finally {
+        setSecureLoading(false);
+      }
+    } else if (type === 'remove') {
+      try {
+        const res = await fetch(`/api/wallet/delete/${wallet.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ passcode: enteredPin })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setSecureAction(null);
+          fetchWallets();
+        } else {
+          setSecureError(data.message || 'Incorrect Account PIN');
+          setSecureShake(true);
+          setTimeout(() => setSecureShake(false), 500);
+        }
+      } catch (_) {
+        setSecureError('Connection timed out. Please retry.');
+      } finally {
+        setSecureLoading(false);
+      }
+    }
+  };
+
+  const handleSecurePinClick = (num: number) => {
+    if (securePin.length >= 6 || secureLoading) return;
+    const nextVal = securePin + num;
+    setSecurePin(nextVal);
+    
+    if (nextVal.length === 6) {
+      handleSecurePinSubmit(nextVal);
+      // clear code after a slight delay
+      setTimeout(() => setSecurePin(''), 1000);
+    }
+  };
+
+  const handleSecurePinDelete = () => {
+    if (securePin.length === 0 || secureLoading) return;
+    setSecurePin(securePin.slice(0, -1));
+  };
+
+  const handleSecurePinClear = () => {
+    if (secureLoading) return;
+    setSecurePin('');
+  };
+
+  const handleSwitch = async (id: string, address: string) => {
     try {
       const res = await fetch('/api/wallet/switch', {
         method: 'POST',
@@ -150,8 +300,9 @@ export function WalletManager({
         },
         body: JSON.stringify({ walletId: id })
       });
+      const data = await res.json();
       if (res.ok) {
-        onWalletSwitched(address);
+        onWalletSwitched(address, data.data?.token);
         fetchWallets();
       }
     } catch (_) {}
@@ -231,7 +382,7 @@ export function WalletManager({
     }
   };
 
-  const handleRename = async (id: number) => {
+  const handleRename = async (id: string) => {
     if (!editName.trim()) return;
     try {
       const res = await fetch('/api/wallet/rename', {
@@ -249,29 +400,9 @@ export function WalletManager({
     } catch (_) {}
   };
 
-  const handleDelete = async (id: number) => {
-    if (wallets.length <= 1) {
-      alert('Security Directive: You cannot delete your last remaining wallet.');
-      return;
-    }
-    if (!confirm('Warning: Are you absolutely sure you want to delete this wallet? All associated balances will be removed from this interface unless restored.')) {
-      return;
-    }
-    try {
-      const res = await fetch(`/api/wallet/delete/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        fetchWallets();
-      } else {
-        const data = await res.json();
-        alert(data.message || 'Failed to delete');
-      }
-    } catch (_) {}
-  };
 
-  const handleBackupConfirm = async (walletId: number) => {
+
+  const handleBackupConfirm = async (walletId: string) => {
     try {
       const res = await fetch('/api/wallet/backup-confirm', {
         method: 'POST',
@@ -512,7 +643,7 @@ export function WalletManager({
                       {/* Backup Required Alert Badge */}
                       {!w.isBackupConfirmed && (
                         <button 
-                          onClick={() => handleStartBackupReveal(w)}
+                          onClick={() => handleBackupRequest(w)}
                           className="w-full mt-3.5 p-2.5 rounded-xl bg-amber-950/15 border border-amber-500/20 flex items-center justify-between text-amber-500 hover:bg-amber-950/30 transition-all font-mono text-[9px] font-bold uppercase tracking-wide"
                         >
                           <div className="flex items-center gap-1.5">
@@ -539,20 +670,20 @@ export function WalletManager({
                             Customize
                           </button>
 
-                          {wallets.length > 1 && (
+                          {!w.isActive && (
                             <button
-                              onClick={() => handleDelete(w.id)}
+                              onClick={() => handleRemoveRequest(w)}
                               className="text-[10px] font-mono text-neutral-500 hover:text-red-400 bg-neutral-900/30 border border-neutral-850/30 px-2.5 py-1.5 rounded-lg transition-all uppercase flex items-center gap-1"
                             >
                               <Trash2 className="w-3 h-3" />
-                              Delete
+                              Remove Wallet
                             </button>
                           )}
                         </div>
 
                         {!w.isActive && (
                           <button
-                            onClick={() => handleSwitch(w.id, w.address)}
+                            onClick={() => handleSwitchRequest(w)}
                             className="text-[10px] font-display font-semibold uppercase tracking-wider text-white bg-red-600 hover:bg-red-700 px-4 py-1.5 rounded-lg transition-all active:scale-95 shadow-[0_0_10px_rgba(239,68,68,0.1)]"
                           >
                             Switch Wallet
@@ -943,6 +1074,115 @@ export function WalletManager({
             )}
 
           </div>
+
+          {/* -------------------- SECURE PIN PROMPT OVERLAY -------------------- */}
+          {secureAction && (
+            <div className="absolute inset-0 z-50 bg-black flex flex-col justify-between p-6">
+              {/* Upper block */}
+              <div className="flex flex-col items-center text-center mt-8">
+                <div className="w-16 h-16 rounded-full bg-red-950/40 border border-red-500/30 flex items-center justify-center mb-5 red-glow">
+                  <Lock className="w-6 h-6 text-red-500 animate-pulse" />
+                </div>
+                <h3 className="text-lg font-display font-bold text-white">
+                  {secureAction.type === 'switch' ? 'Verify Account PIN' : 'Verify Account PIN'}
+                </h3>
+                <p className="text-xs text-neutral-400 mt-1 max-w-xs leading-relaxed">
+                  {secureAction.type === 'switch' 
+                    ? `Please enter your 6-digit Account PIN to switch active control to "${secureAction.wallet.name}"`
+                    : `Please enter your 6-digit Account PIN to decrypt backup secrets for "${secureAction.wallet.name}"`
+                  }
+                </p>
+
+                {/* password dots */}
+                <motion.div 
+                  animate={secureShake ? { x: [-10, 10, -10, 10, 0] } : {}}
+                  className="flex items-center gap-4 mt-8"
+                >
+                  {[...Array(6)].map((_, i) => {
+                    const active = i < securePin.length;
+                    return (
+                      <div 
+                        key={i} 
+                        className={`w-4 h-4 rounded-full border transition-all duration-300 ${
+                          active 
+                            ? 'bg-red-500 border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)] scale-110' 
+                            : 'bg-neutral-900 border-neutral-700'
+                        }`}
+                      />
+                    );
+                  })}
+                </motion.div>
+
+                {/* feed lines */}
+                <div className="h-6 mt-6 flex items-center">
+                  {secureError ? (
+                    <span className="text-red-500 text-xs flex items-center gap-1 font-mono">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      {secureError}
+                    </span>
+                  ) : secureLoading ? (
+                    <span className="text-red-400 text-xs font-mono flex items-center gap-1.5 animate-pulse">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Decrypting database layers...
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Keyboard Grid */}
+              <div className="w-full max-w-xs mx-auto mb-4">
+                <div className="grid grid-cols-3 gap-y-4 gap-x-6 justify-items-center">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      disabled={secureLoading}
+                      onClick={() => handleSecurePinClick(num)}
+                      className="w-16 h-16 rounded-full border border-neutral-900 bg-neutral-950/60 active:bg-red-950/30 active:border-red-500/30 disabled:opacity-20 text-white font-display text-2xl flex items-center justify-center transition-all duration-200 outline-none select-none hover:border-neutral-800"
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  
+                  <button
+                    type="button"
+                    disabled={secureLoading}
+                    onClick={handleSecurePinClear}
+                    className="w-16 h-16 text-neutral-500 text-xs font-mono flex items-center justify-center outline-none disabled:opacity-20"
+                  >
+                    CLEAR
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={secureLoading}
+                    onClick={() => handleSecurePinClick(0)}
+                    className="w-16 h-16 rounded-full border border-neutral-900 bg-neutral-950/60 active:bg-red-950/30 active:border-red-500/30 disabled:opacity-20 text-white font-display text-2xl flex items-center justify-center transition-all duration-200 outline-none hover:border-neutral-800"
+                  >
+                    0
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={secureLoading}
+                    onClick={handleSecurePinDelete}
+                    className="w-16 h-16 text-neutral-400 flex items-center justify-center outline-none active:text-red-500 disabled:opacity-20"
+                  >
+                    <Delete className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Cancel secure flow button */}
+                <button
+                  onClick={() => setSecureAction(null)}
+                  disabled={secureLoading}
+                  className="w-full mt-6 py-2.5 bg-neutral-900 border border-neutral-800 hover:bg-neutral-850 text-neutral-400 hover:text-white rounded-xl text-xs font-display font-medium transition-all"
+                >
+                  Cancel Action
+                </button>
+              </div>
+            </div>
+          )}
         </motion.div>
       )}
     </AnimatePresence>

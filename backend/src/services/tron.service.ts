@@ -59,9 +59,9 @@ export class TronService {
   /**
    * Get an instance of TronWeb based on current network settings (TRON Mainnet only)
    */
-  public getTronWebInstance(address?: string): any {
-    const settings = this.db.findMany<any>('network_settings', () => true);
-    const currentNetwork = settings.find(n => n.network_name === 'mainnet') || settings[0];
+  public async getTronWebInstance(address?: string): Promise<any> {
+    const settings = await this.db.findMany<any>('network_settings', () => true);
+    const currentNetwork = settings.find((n: any) => n.network_name === 'mainnet') || settings[0];
     
     const fullNode = currentNetwork?.full_node_url || 'https://api.trongrid.io';
 
@@ -196,7 +196,7 @@ export class TronService {
     const contractAddress = usdtToken?.contract_address || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
     const decimals = usdtToken?.decimals || 6;
 
-    const tronWeb = this.getTronWebInstance(address);
+    const tronWeb = await this.getTronWebInstance(address);
     const lastCached = this.balancesCache.get(address);
 
     // 1. Fetch TRX balance (represented in SUN)
@@ -262,7 +262,7 @@ export class TronService {
               signal: controller.signal
             });
             if (res.status === 429) {
-              throw new Error('429 Rate Limit Exceeded');
+              throw new Error('External API Overloaded');
             }
             return res;
           }, 3, 300, `Direct balance fallback fetch from ${endpoint.name}`);
@@ -323,7 +323,7 @@ export class TronService {
     toAddress: string,
     amountTrx: number
   ): Promise<{ txHash: string; fee: number }> {
-    const tronWeb = this.getTronWebInstance();
+    const tronWeb = await this.getTronWebInstance();
     const amountInSun = Math.round(amountTrx * 1_000_000);
 
     try {
@@ -353,7 +353,7 @@ export class TronService {
     toAddress: string,
     amountUsdt: number
   ): Promise<{ txHash: string; fee: number }> {
-    const tronWeb = this.getTronWebInstance();
+    const tronWeb = await this.getTronWebInstance();
     
     const tokens = this.db.findMany<any>('tokens', t => t.symbol === 'USDT');
     const usdtToken = tokens[0];
@@ -383,7 +383,7 @@ export class TronService {
    * Broadcast a fully signed transaction to TRON Mainnet
    */
   public async broadcastSignedTransaction(signedTx: any): Promise<{ txHash: string; fee: number }> {
-    const tronWeb = this.getTronWebInstance();
+    const tronWeb = await this.getTronWebInstance();
     try {
       const broadcast = await tronWeb.trx.sendRawTransaction(signedTx);
       if (broadcast && (broadcast.result || broadcast.txid)) {
@@ -414,7 +414,7 @@ export class TronService {
    * Fetch a transaction info/status by ID from TRON blockchain
    */
   public async getTransactionStatus(txId: string): Promise<{ status: 'confirmed' | 'failed' | 'pending'; error?: string }> {
-    const tronWeb = this.getTronWebInstance();
+    const tronWeb = await this.getTronWebInstance();
     try {
       const txInfo = await tronWeb.trx.getTransactionInfo(txId);
       if (txInfo && txInfo.id) {
@@ -500,7 +500,7 @@ export class TronService {
     bandwidth: { limit: number; remaining: number };
     energy: { limit: number; remaining: number };
   }> {
-    const tronWeb = this.getTronWebInstance(address);
+    const tronWeb = await this.getTronWebInstance(address);
     try {
       const resources: any = await withRetry(() => tronWeb.trx.getAccountResources(address), 3, 300, 'Account resources fetch');
       const freeBandwidthLimit = resources.freeNetLimit || resources.FreeNetLimit || 0;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowUpRight, ArrowDownLeft, Copy, Share2, Eye, EyeOff, RefreshCw, 
-  Settings, Bell, CreditCard, ChevronRight, Check, X, AlertCircle, 
+  Settings, Bell, History, List, CreditCard, ChevronRight, Check, X, AlertCircle, 
   Sliders, Info, HelpCircle, Activity, LayoutGrid, Award, Coins, Shield, Fingerprint, Key, Lock, Unlock, LogOut,
   Star, Trash2, Plus, UserPlus, BookOpen, Users
 } from 'lucide-react';
@@ -11,6 +11,7 @@ import { TronWeb } from 'tronweb';
 import { Token, Transaction, Notification } from '../types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import PasscodeScreen from './PasscodeScreen';
+import TransactionHistoryScreen from './TransactionHistoryScreen';
 import { secureStorePrivateData, secureRetrievePrivateData, encryptPinForBiometrics, decryptPinForBiometrics } from '../utils/secureStorage';
 import { registerBiometrics, verifyBiometrics } from '../utils/biometrics';
 import BiometricPrompt from './BiometricPrompt';
@@ -130,6 +131,10 @@ export default function DashboardScreen({
   const [marketError, setMarketError] = useState<string | null>(null);
   const [selectedMarketToken, setSelectedMarketToken] = useState<any | null>(null);
   const [history, setHistory] = useState<Transaction[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTxForScan, setSelectedTxForScan] = useState<any | null>(null);
+  const [showTxScanModal, setShowTxScanModal] = useState(false);
+  const [showFullHistory, setShowFullHistory] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
@@ -757,11 +762,25 @@ export default function DashboardScreen({
     }
 
     setTransferError(null);
-    if (selectedToken?.isInternal) {
-      setTransferStep('passcode');
-    } else {
-      setTransferStep('confirm');
-      runEstimation(recipient.trim(), amount, selectedToken!);
+    setTransferStep('confirm');
+    runEstimation(recipient.trim(), amount, selectedToken!);
+  };
+
+  const handleOpenNestScan = async (hash: string) => {
+    try {
+      const res = await fetch(`/api/wallet/tx/${hash}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedTxForScan(data.data);
+        setShowTxScanModal(true);
+      } else {
+        alert('Transaction details could not be retrieved.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error fetching transaction details.');
     }
   };
 
@@ -848,7 +867,7 @@ export default function DashboardScreen({
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            tokenSymbol: selectedToken.symbol,
+            tokenId: selectedToken.id,
             recipientAddress: recipient.trim(),
             amount: parseFloat(amount),
             passcode
@@ -938,15 +957,64 @@ export default function DashboardScreen({
         return;
       }
 
+      // Requirement 2: Clean the private key
+      const cleanPrivateKey = privateKey.replace(/^0x/i, '').replace(/[\s\r\n]+/g, '').replace(/[\u200B-\u200D\uFEFF]/g, '');
+      const isValidHex = /^[0-9a-fA-F]{64}$/.test(cleanPrivateKey);
+
       // 2. Build and sign transaction client-side
       const tronWeb = new TronWeb({ fullHost: 'https://api.trongrid.io' });
+      
+      const addressHex = tronWeb.address.toHex(address);
+
+      // Requirement 5 & 9: Print debug logs before broadcast
+      console.log('--- TRON TRANSFER DEBUG LOGS ---');
+      console.log('Active Base58 address:', address);
+      console.log('Active Hex address:', addressHex);
+      console.log('Private key length:', cleanPrivateKey.length);
+      console.log('Private key passes hex validation:', isValidHex);
+      console.log('Recipient address:', recipient.trim());
+      console.log('Amount:', amount);
+      console.log('Network:', 'TRON Mainnet (trongrid)');
+      console.log('---------------------------------');
+
+      // Requirement 6: Check for corrupted private key
+      if (!isValidHex) {
+        setTransferError('Wallet private key is corrupted.');
+        setTransferStep('details');
+        setTransferLoading(false);
+        return;
+      }
+      
+      // Requirement 1 & 2 (previous): Derive and verify address from private key
+      let derivedAddress: string | false = '';
+      try {
+        derivedAddress = tronWeb.address.fromPrivateKey(cleanPrivateKey);
+        if (derivedAddress === false) throw new Error('Invalid PK');
+      } catch (err) {
+        setTransferError('Invalid private key format.');
+        setTransferStep('details');
+        setTransferLoading(false);
+        return;
+      }
+      
+      if (derivedAddress !== address) {
+        console.error(`Address mismatch. Expected: ${address}, Derived: ${derivedAddress}`);
+        setTransferError('Selected wallet does not match its private key.');
+        setTransferStep('details');
+        setTransferLoading(false);
+        return;
+      }
+
+      tronWeb.setAddress(address);
+
       let signedTx: any = null;
 
       try {
         if (selectedToken.symbol === 'TRX') {
           const sunAmount = Math.round(parseFloat(amount) * 1_000_000);
           const transaction = await tronWeb.transactionBuilder.sendTrx(recipient.trim(), sunAmount, address);
-          signedTx = await tronWeb.trx.sign(transaction, privateKey);
+          if (!transaction) throw new Error('Failed to build TRX transaction');
+          signedTx = await tronWeb.trx.sign(transaction, cleanPrivateKey);
         } else {
           // USDT
           const contractAddress = selectedToken.contract_address || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
@@ -963,7 +1031,8 @@ export default function DashboardScreen({
             parameter,
             address
           );
-          signedTx = await tronWeb.trx.sign(transaction.transaction, privateKey);
+          if (!transaction || !transaction.transaction) throw new Error('Failed to build triggerSmartContract transaction');
+          signedTx = await tronWeb.trx.sign(transaction.transaction, cleanPrivateKey);
         }
 
         // 3. Broadcast to TRON Mainnet via server proxy (which logs to database)
@@ -978,7 +1047,7 @@ export default function DashboardScreen({
             passcode,
             recipientAddress: recipient.trim(),
             amount: parseFloat(amount),
-            tokenSymbol: selectedToken.symbol
+            tokenId: selectedToken.id
           })
         });
         const data = await res.json();
@@ -1182,7 +1251,7 @@ export default function DashboardScreen({
               </div>
 
               {/* Action Buttons */}
-              <div className="grid grid-cols-2 gap-3.5 mt-6 border-t border-neutral-900 pt-5">
+              <div className="grid grid-cols-3 gap-3.5 mt-6 border-t border-neutral-900 pt-5">
                 <button 
                   onClick={() => {
                     const trx = portfolio?.assets.find(a => a.symbol === 'TRX');
@@ -1200,6 +1269,14 @@ export default function DashboardScreen({
                 >
                   <ArrowDownLeft className="w-4 h-4 text-red-500" />
                   Receive
+                </button>
+
+                <button 
+                  onClick={() => setShowFullHistory(true)}
+                  className="py-3 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-200 font-display text-xs font-semibold rounded-xl flex items-center justify-center gap-2 transition-all active:scale-98"
+                >
+                  <History className="w-4 h-4 text-neutral-400" />
+                  History
                 </button>
               </div>
             </div>
@@ -1317,7 +1394,7 @@ export default function DashboardScreen({
 
               <div className="flex flex-col gap-2.5">
                 {portfolio?.assets.map((asset) => {
-                  const marketToken = marketData.find(m => m.symbol === asset.symbol);
+                  const marketToken = marketData.find(m => m.id === asset.id);
                   const isChangePositive = marketToken ? marketToken.change24h >= 0 : true;
                   const priceToDisplay = marketToken ? marketToken.priceUsd : asset.priceUsd;
                   return (
@@ -1359,11 +1436,6 @@ export default function DashboardScreen({
                             className="w-full h-full object-contain rounded-md"
                             referrerPolicy="no-referrer"
                           />
-                          {asset.isInternal && (
-                            <span className="absolute bottom-0 right-0 text-[6px] font-mono px-0.5 bg-yellow-600 text-yellow-100 rounded-tl uppercase border-t border-l border-neutral-800 font-bold scale-90">
-                              Ledg
-                            </span>
-                          )}
                         </div>
                         <div className="flex flex-col">
                           <span className="text-xs text-white font-semibold leading-none group-hover:text-red-400 transition-colors">{asset.name}</span>
@@ -1423,75 +1495,6 @@ export default function DashboardScreen({
                   );
                 })}
               </div>
-            </div>
-
-            {/* Transaction Activity History */}
-            <div>
-              <div className="flex items-center justify-between mb-3.5 mt-2">
-                <h3 className="text-xs text-neutral-500 font-mono tracking-wide uppercase font-semibold">Activity logs</h3>
-              </div>
-
-              {history.length === 0 ? (
-                <div className="p-6 text-center bg-neutral-950/40 border border-neutral-900 rounded-xl">
-                  <Activity className="w-5 h-5 text-neutral-600 mx-auto mb-2" />
-                  <p className="text-xs text-neutral-500">No transactions recorded yet.</p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {history.slice(0, 15).map((tx) => {
-                    const isOut = tx.direction === 'out';
-                    const isInternal = tx.type === 'internal';
-                    return (
-                      <div key={tx.id} className="p-3 bg-neutral-950 border border-neutral-900 rounded-xl flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
-                            isOut 
-                              ? 'bg-red-950/10 border-red-500/20 text-red-500' 
-                              : 'bg-green-950/10 border-green-500/20 text-green-500'
-                          }`}>
-                            {isOut ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownLeft className="w-4 h-4" />}
-                          </div>
-
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs text-white font-semibold">
-                                {isOut ? 'Sent' : 'Received'} {tx.asset_symbol}
-                              </span>
-                              {isInternal && (
-                                <span className="text-[7px] font-mono font-bold px-1 bg-neutral-900 text-neutral-400 rounded border border-neutral-800 uppercase">
-                                  Internal
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-neutral-500 font-mono mt-0.5">
-                              {isOut ? `To: ${tx.counterparty.slice(0, 5)}...${tx.counterparty.slice(-4)}` : `From: ${tx.counterparty.slice(0, 5)}...${tx.counterparty.slice(-4)}`}
-                            </span>
-                            {tx.tx_hash && (
-                              <a
-                                href={`https://tronscan.org/#/transaction/${tx.tx_hash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[9px] text-red-500 hover:text-red-400 font-mono mt-0.5 block hover:underline"
-                              >
-                                Hash: {tx.tx_hash.slice(0, 6)}... <ArrowUpRight className="inline w-2.5 h-2.5" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end">
-                          <span className={`text-xs font-mono font-bold ${isOut ? 'text-neutral-300' : 'text-green-400'}`}>
-                            {isOut ? '-' : '+'}{tx.amount}
-                          </span>
-                          <span className="text-[9px] text-neutral-500 font-mono mt-0.5">
-                            {new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -1663,6 +1666,131 @@ export default function DashboardScreen({
         )}
       </AnimatePresence>
 
+      {/* TronNestScan Detail Modal */}
+      <AnimatePresence>
+        {showTxScanModal && selectedTxForScan && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/95 flex items-center justify-center p-6 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="w-full max-w-sm bg-neutral-950 border border-neutral-900 rounded-2xl p-5 flex flex-col gap-4 shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between border-b border-neutral-900 pb-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-400">
+                    TronNestScan Preview
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowTxScanModal(false)}
+                  className="w-7 h-7 rounded-full bg-neutral-900 border border-neutral-850 hover:bg-neutral-800 flex items-center justify-center text-neutral-400 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-3 font-mono text-[11px] text-neutral-400 leading-normal">
+                {/* Status */}
+                <div className="flex items-center justify-between">
+                  <span>Status</span>
+                  <span className="text-green-500 font-bold flex items-center gap-1">
+                    SUCCESS / CONFIRMED
+                  </span>
+                </div>
+
+                {/* Hash */}
+                <div className="flex flex-col gap-1 border-t border-neutral-900 pt-2.5">
+                  <div className="flex items-center justify-between">
+                    <span>Transaction Hash</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedTxForScan.txHash);
+                        alert('Hash copied to clipboard!');
+                      }}
+                      className="text-[9px] text-red-500 hover:text-red-400 flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" /> Copy
+                    </button>
+                  </div>
+                  <span className="text-xs text-neutral-200 select-all break-all font-semibold leading-relaxed">
+                    {selectedTxForScan.txHash}
+                  </span>
+                </div>
+
+                {/* Sender */}
+                <div className="flex flex-col gap-1 border-t border-neutral-900 pt-2.5">
+                  <span>Sender Wallet</span>
+                  <span className="text-neutral-300 break-all leading-normal">
+                    {selectedTxForScan.sender_address}
+                  </span>
+                </div>
+
+                {/* Receiver */}
+                <div className="flex flex-col gap-1 border-t border-neutral-900 pt-2.5">
+                  <span>Receiver Wallet</span>
+                  <span className="text-neutral-300 break-all leading-normal">
+                    {selectedTxForScan.receiver_address}
+                  </span>
+                </div>
+
+                {/* Amount */}
+                <div className="flex items-center justify-between border-t border-neutral-900 pt-2.5">
+                  <span>Amount Transacted</span>
+                  <span className="text-white font-bold text-xs">
+                    {selectedTxForScan.amount} {selectedTxForScan.token}
+                  </span>
+                </div>
+
+                {/* Network & Block info */}
+                <div className="grid grid-cols-2 gap-2 border-t border-neutral-900 pt-2.5 text-[10px]">
+                  <div>
+                    <span className="text-neutral-500 block">Network</span>
+                    <span className="text-neutral-300 font-semibold">{selectedTxForScan.network}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 block">Block Height (Virtual)</span>
+                    <span className="text-neutral-300 font-semibold">{selectedTxForScan.blockHeight}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div>
+                    <span className="text-neutral-500 block">Nonce</span>
+                    <span className="text-neutral-300 font-semibold">{selectedTxForScan.nonce}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 block">Gas Limit / Gas Used</span>
+                    <span className="text-neutral-300 font-semibold">{selectedTxForScan.gasUsed} SUN</span>
+                  </div>
+                </div>
+
+                {/* Timestamp */}
+                <div className="flex items-center justify-between border-t border-neutral-900 pt-2.5 text-[10px]">
+                  <span>Timestamp</span>
+                  <span className="text-neutral-300">
+                    {new Date(selectedTxForScan.timestamp).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowTxScanModal(false)}
+                className="w-full mt-2 py-3 bg-neutral-900 border border-neutral-800 hover:bg-neutral-800 text-neutral-200 font-semibold text-xs rounded-xl transition-all"
+              >
+                Close Explorer View
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Slide-Up QR Receive Modal */}
       <AnimatePresence>
         {showReceiveModal && (
@@ -1760,11 +1888,6 @@ export default function DashboardScreen({
                       className="w-full h-full object-contain rounded-md"
                       referrerPolicy="no-referrer"
                     />
-                    {selectedMarketToken.isInternal && (
-                      <span className="absolute bottom-0 right-0 text-[6px] font-mono px-0.5 bg-yellow-600 text-yellow-100 rounded-tl uppercase border-t border-l border-neutral-800 font-bold scale-95">
-                        Ledg
-                      </span>
-                    )}
                   </div>
                   <div className="flex flex-col">
                     <span className="text-sm text-neutral-400 font-mono uppercase">{selectedMarketToken.symbol}</span>
@@ -1921,7 +2044,7 @@ export default function DashboardScreen({
               <div className="grid grid-cols-2 gap-4 mt-2 shrink-0">
                 <button
                   onClick={() => {
-                    const matchingAsset = portfolio?.assets.find(a => a.symbol === selectedMarketToken.symbol);
+                    const matchingAsset = portfolio?.assets.find(a => a.id === selectedMarketToken.id);
                     if (matchingAsset) {
                       openSend(matchingAsset);
                     }
@@ -1934,7 +2057,7 @@ export default function DashboardScreen({
                 </button>
                 <button
                   onClick={() => {
-                    const matchingAsset = portfolio?.assets.find(a => a.symbol === selectedMarketToken.symbol);
+                    const matchingAsset = portfolio?.assets.find(a => a.id === selectedMarketToken.id);
                     setSelectedToken(matchingAsset || null);
                     setShowReceiveModal(true);
                     setSelectedMarketToken(null);
@@ -2267,6 +2390,14 @@ export default function DashboardScreen({
                       </div>
                     </div>
 
+                    {/* Network Display */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] text-neutral-500 font-mono uppercase font-semibold tracking-wider">Network</label>
+                      <div className="w-full p-3.5 bg-neutral-950 border border-neutral-900 rounded-xl text-xs font-mono text-neutral-300">
+                        {selectedToken.isInternal ? 'TronNest Network' : 'TRON Mainnet'}
+                      </div>
+                    </div>
+
                     {/* Compact Resources Display */}
                     {!selectedToken.isInternal && (
                       <div className="grid grid-cols-2 gap-2.5 p-3 bg-neutral-950 border border-neutral-900 rounded-xl font-mono text-[10px]">
@@ -2285,11 +2416,7 @@ export default function DashboardScreen({
                     <div className="p-3 bg-neutral-950 border border-neutral-900 rounded-xl flex gap-2.5">
                       <Info className="w-4 h-4 text-red-500 shrink-0" />
                       <div className="text-[10px] text-neutral-400 leading-relaxed font-mono">
-                        {selectedToken.isInternal ? (
-                          <span>This is an <span className="text-red-400">Internal Token</span> transfer. Settles instantly off-chain via secure internal database. Zero network fee!</span>
-                        ) : (
-                          <span>This is an <span className="text-red-400">On-Chain Token</span> transfer. Settle time ~1 minute on TRON Mainnet. Est. Bandwidth: 270 - 345 points.</span>
-                        )}
+                        <span>Transaction will be securely signed and broadcasted to the <span className="text-red-400 font-semibold">{selectedToken.isInternal ? 'TronNest Network' : 'TRON Mainnet'}</span>. Settle time is typically under 1 minute.</span>
                       </div>
                     </div>
 
@@ -2324,7 +2451,7 @@ export default function DashboardScreen({
                   >
                     <div className="p-4 bg-neutral-950 border border-neutral-900 rounded-xl flex flex-col gap-3.5">
                       <h4 className="text-[10px] text-neutral-500 font-mono uppercase font-semibold tracking-wider border-b border-neutral-900 pb-2">
-                        On-Chain Resource Analysis
+                        Review Transaction
                       </h4>
 
                       {isEstimating ? (
@@ -2343,25 +2470,35 @@ export default function DashboardScreen({
                           {/* Recipient */}
                           <div className="flex justify-between items-center text-xs">
                             <span className="text-neutral-400">Recipient Address</span>
-                            <span className="font-mono text-neutral-300 text-[10px]">{recipient.slice(0, 8)}...{recipient.slice(-8)}</span>
+                            <span className="font-mono text-neutral-300 text-[10px] select-all break-all text-right max-w-[180px]">{recipient}</span>
                           </div>
 
-                          {/* Estimated Bandwidth */}
+                          {/* Network */}
                           <div className="flex justify-between items-center text-xs">
-                            <span className="text-neutral-400">Bandwidth Cost</span>
-                            <span className="font-mono text-neutral-300">{estBandwidthNeeded} Points</span>
+                            <span className="text-neutral-400">Network</span>
+                            <span className="font-mono text-neutral-300 font-semibold">{selectedToken.isInternal ? 'TronNest Network' : 'TRON Mainnet'}</span>
                           </div>
 
-                          {/* Estimated Energy */}
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-neutral-400">Energy Cost</span>
-                            <span className="font-mono text-neutral-300">{estEnergyNeeded > 0 ? `${estEnergyNeeded.toLocaleString()} Points` : '0 (None Needed)'}</span>
-                          </div>
+                          {!selectedToken.isInternal && (
+                            <>
+                              {/* Estimated Bandwidth */}
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-neutral-400">Bandwidth Cost</span>
+                                <span className="font-mono text-neutral-300">{estBandwidthNeeded} Points</span>
+                              </div>
 
-                          {/* Network Burn Fee */}
+                              {/* Estimated Energy */}
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-neutral-400">Energy Cost</span>
+                                <span className="font-mono text-neutral-300">{estEnergyNeeded > 0 ? `${estEnergyNeeded.toLocaleString()} Points` : '0 (None Needed)'}</span>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Estimated Burn Fee / Gas Fee */}
                           <div className="flex justify-between items-center text-xs border-t border-neutral-900 pt-2">
-                            <span className="text-red-400 font-semibold">Est. Burn Fee (TRX)</span>
-                            <span className="font-mono text-red-400 font-bold">{estimatedFee} TRX</span>
+                            <span className="text-red-400 font-semibold">Estimated Fee</span>
+                            <span className="font-mono text-red-400 font-bold">{selectedToken.isInternal ? '0.00 TRX' : `${estimatedFee} TRX`}</span>
                           </div>
                         </div>
                       )}
@@ -2835,9 +2972,12 @@ export default function DashboardScreen({
         onClose={() => setShowWalletManager(false)}
         token={token}
         currentAddress={address}
-        onWalletSwitched={(newAddress) => {
+        onWalletSwitched={(newAddress, newToken) => {
           // Switch global address and reload to force sync
           localStorage.setItem('wallet_address', newAddress);
+          if (newToken) {
+            localStorage.setItem('wallet_jwt', newToken);
+          }
           setShowWalletManager(false);
           window.location.reload();
         }}
@@ -2858,6 +2998,18 @@ export default function DashboardScreen({
             <h3 className="text-sm font-display font-bold text-white uppercase tracking-wider">TronNest Vault Closed</h3>
             <p className="text-[10px] text-neutral-500 font-mono mt-1.5 uppercase">Security Privacy Screen Active</p>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showFullHistory && (
+          <TransactionHistoryScreen
+            history={history}
+            portfolio={portfolio}
+            marketData={marketData}
+            token={token}
+            onClose={() => setShowFullHistory(false)}
+          />
         )}
       </AnimatePresence>
     </div>

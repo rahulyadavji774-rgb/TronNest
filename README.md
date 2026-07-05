@@ -1,20 +1,18 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# TronNest Project Documentation
 
-# Run and deploy your AI Studio app
+## Overview
+TronNest is an advanced, production-ready internal token wallet and admin management system. It provides secure wallets, token minting/burning capabilities, and an administrative dashboard for monitoring and managing user accounts and internal ledgers.
 
-This contains everything you need to run your app locally.
+## Architecture
+- **Frontend**: React 19, Vite, Tailwind CSS
+- **Backend**: Node.js, Express
+- **Database**: MariaDB via Drizzle ORM
+- **Authentication**: JWT, bcrypt, Admin Roles
+- **Security**: Helmet, Rate Limiting, CORS, Parameterized SQL queries
 
-View your app in AI Studio: https://ai.studio/apps/df5c1577-20d6-4bb5-9844-b92672d1f42a
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Features
+- **Wallet Engine**: Create, activate, freeze, and manage wallets.
+- **Authentication Engine**: JWT-based auth with refresh tokens, multi-role admin support.
+- **Internal Token Engine**: Unlimited custom internal tokens (mint, burn, freeze, lock supply).
+- **Balance Engine**: Atomic double-entry ledger updates.
+- **Admin Panel**: Dashboard for users, tokens, balances, transaction history, audit logs, and more.

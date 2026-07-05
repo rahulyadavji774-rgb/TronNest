@@ -4,9 +4,19 @@ import {
   X, Shield, Users, Coins, TrendingUp, AlertOctagon, Plus, Trash2, 
   Eye, EyeOff, RefreshCw, KeyRound, Search, AlertCircle, Check, 
   ListOrdered, FileText, Ban, Sparkles, LogOut, ArrowRight, Edit3, Upload,
-  DollarSign, Activity, Settings, HelpCircle, Lock, Unlock
+  DollarSign, Activity, Settings, HelpCircle, Lock, Unlock, Radio, BarChart2, Database, Wrench, ShieldAlert, CheckCircle, XCircle, Clock, Save, Download, FileJson, Mail, Bell, Smartphone, Monitor
 } from 'lucide-react';
 import { Token, Transaction, UserProfile, AuditLog, SystemStats } from '../types';
+
+import { SystemSettings } from './admin/SystemSettings';
+import { BroadcastCenter } from './admin/BroadcastCenter';
+import { Reports } from './admin/Reports';
+import { SystemMonitor } from './admin/SystemMonitor';
+import { BackupCenter } from './admin/BackupCenter';
+import { MaintenanceMode } from './admin/MaintenanceMode';
+import { ApiManagement } from './admin/ApiManagement';
+import { SecurityLogs } from './admin/SecurityLogs';
+
 import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 
 interface AdminPanelProps {
@@ -14,7 +24,7 @@ interface AdminPanelProps {
 }
 
 interface LedgerEntry {
-  id: number;
+  id: string;
   fromAddress: string;
   toAddress: string;
   symbol: string;
@@ -46,7 +56,53 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [userQuery, setUserQuery] = useState('');
   const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'frozen'>('all');
   const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
-  
+
+  const [userTokenForm, setUserTokenForm] = useState({ tokenId: '', amount: '', description: '' });
+  const [userManageMsg, setUserManageMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
+
+  const handleUserTokenAction = async (userId: string, action: string) => {
+    try {
+      setUserManageMsg(null);
+      let endpoint = '';
+      let body: any = { userId };
+      
+      if (action === 'suspend') endpoint = '/api/admin/users/suspend-transfers';
+      if (action === 'restore') endpoint = '/api/admin/users/restore-transfers';
+      
+      if (action === 'freeze' || action === 'unfreeze' || action === 'reset' || action === 'credit' || action === 'debit') {
+        if (!userTokenForm.tokenId) {
+          setUserManageMsg({ type: 'error', text: 'Select a token first.' });
+          return;
+        }
+        body.tokenId = userTokenForm.tokenId;
+        endpoint = `/api/admin/users/balances/${action}`;
+        
+        if (action === 'credit' || action === 'debit') {
+          if (!userTokenForm.amount || parseFloat(userTokenForm.amount) <= 0) {
+            setUserManageMsg({ type: 'error', text: 'Valid amount required.' });
+            return;
+          }
+          body.amount = userTokenForm.amount;
+          body.description = userTokenForm.description;
+        }
+      }
+      
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUserManageMsg({ type: 'success', text: data.message });
+      } else {
+        setUserManageMsg({ type: 'error', text: data.message });
+      }
+    } catch (e: any) {
+      setUserManageMsg({ type: 'error', text: e.message || 'Action failed' });
+    }
+  };
+
   const [tokenQuery, setTokenQuery] = useState('');
   const [tokenTypeFilter, setTokenTypeFilter] = useState<'all' | 'internal' | 'blockchain'>('all');
 
@@ -73,6 +129,19 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [editLogoUrl, setEditLogoUrl] = useState('');
   const [editDecimals, setEditDecimals] = useState(6);
   const [editPrice, setEditPrice] = useState('1.0');
+
+  const [editBuyPrice, setEditBuyPrice] = useState('1.0');
+  const [editSellPrice, setEditSellPrice] = useState('1.0');
+  const [editAutoPrice, setEditAutoPrice] = useState(false);
+
+  const [editTradingEnabled, setEditTradingEnabled] = useState(true);
+  const [editDepositEnabled, setEditDepositEnabled] = useState(true);
+  const [editWithdrawEnabled, setEditWithdrawEnabled] = useState(true);
+
+  const [editSupplyLocked, setEditSupplyLocked] = useState(false);
+
+
+
   const [editDesc, setEditDesc] = useState('');
   const [editTransferEnabled, setEditTransferEnabled] = useState(true);
   const [editVisible, setEditVisible] = useState(true);
@@ -98,7 +167,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   const [userBalanceMsg, setUserBalanceMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [userBalanceLoading, setUserBalanceLoading] = useState(false);
 
-  const fetchUserBalances = async (userId: number) => {
+  const fetchUserBalances = async (userId: string) => {
     if (!adminToken) return;
     setBalancesLoading(true);
     setUserBalanceMsg(null);
@@ -122,7 +191,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     
     setUserBalanceLoading(true);
     setUserBalanceMsg(null);
-    const targetTokenId = tokenId || parseInt(userBalanceTokenId);
+    const targetTokenId = tokenId || userBalanceTokenId;
     const targetAmount = customAmount || userBalanceAmount;
     const targetDesc = customDesc || userBalanceDesc;
 
@@ -279,7 +348,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   };
 
   // Toggle Freeze User Wallet State
-  const handleToggleFreeze = async (userId: number, currentStatus: string) => {
+  const handleToggleFreeze = async (userId: string, currentStatus: string) => {
     const endpoint = currentStatus === 'frozen' ? '/api/admin/users/unfreeze' : '/api/admin/users/freeze';
     try {
       const res = await fetch(endpoint, {
@@ -366,6 +435,9 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
     setEditLogoUrl(token.logoUrl);
     setEditDecimals(token.decimals);
     setEditPrice(String(token.priceUsd));
+    setEditBuyPrice(String(token.priceUsd * 1.05)); // mock values or whatever
+    setEditSellPrice(String(token.priceUsd * 0.95));
+    setEditAutoPrice(false);
     setEditDesc((token as any).description || '');
     setEditTransferEnabled((token as any).isTransferEnabled !== false);
     setEditVisible((token as any).isVisible !== false);
@@ -412,7 +484,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
   };
 
   // Delete Custom Token
-  const handleDeleteToken = async (tokenId: number) => {
+  const handleDeleteToken = async (tokenId: string) => {
     if (!window.confirm('Are you absolutely sure you want to permanently delete this custom asset? This action will destroy all associated balance ledger nodes.')) return;
     try {
       const res = await fetch(`/api/admin/tokens/${tokenId}`, {
@@ -446,7 +518,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
         },
         body: JSON.stringify({
           walletAddress: adjustAddress.trim(),
-          tokenId: parseInt(adjustTokenId),
+          tokenId: adjustTokenId,
           amount: parseFloat(adjustAmount),
           description: adjustDesc
         })
@@ -582,7 +654,17 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                 { id: 'tokens', label: 'Custom Tokens', icon: Coins },
                 { id: 'balances', label: 'Mint/Deduct', icon: Sparkles },
                 { id: 'ledger', label: 'Transaction History', icon: ListOrdered },
-                { id: 'logs', label: 'Audit Logs', icon: FileText }
+                { id: 'logs', label: 'Audit Logs', icon: FileText },
+                ...(adminRole === 'root' ? [
+                  { id: 'settings', label: 'Settings', icon: Settings },
+                  { id: 'broadcast', label: 'Broadcast', icon: Radio },
+                  { id: 'reports', label: 'Reports', icon: BarChart2 },
+                  { id: 'monitor', label: 'Monitor', icon: Activity },
+                  { id: 'backup', label: 'Backup', icon: Database },
+                  { id: 'maintenance', label: 'Maintenance', icon: Wrench },
+                  { id: 'api', label: 'API', icon: KeyRound },
+                  { id: 'security_logs', label: 'Security Logs', icon: ShieldAlert }
+                ] : [])
               ].map((tab) => {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;
@@ -933,7 +1015,59 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                                       animate={{ opacity: 1, height: 'auto' }}
                                       className="border-t border-neutral-800/60 pt-3 mt-1.5 flex flex-col gap-3"
                                     >
-                                      <div className="grid grid-cols-2 gap-3.5 text-[10px] font-mono">
+                                      
+                                      {/* User Token Management & Transfer Control */}
+                                      {adminRole === 'root' && (
+                                        <div className="border border-neutral-800 rounded p-3 flex flex-col gap-3 mt-2 bg-neutral-950/20">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-neutral-400 font-mono uppercase font-bold">User Token Management</span>
+                                            <div className="flex items-center gap-2">
+                                              <button onClick={() => handleUserTokenAction(usr.id, 'suspend')} className="text-[9px] bg-red-950/50 text-red-400 border border-red-900 px-2 py-1 rounded hover:bg-red-900 transition-colors uppercase font-mono font-bold">Suspend Transfers</button>
+                                              <button onClick={() => handleUserTokenAction(usr.id, 'restore')} className="text-[9px] bg-green-950/50 text-green-400 border border-green-900 px-2 py-1 rounded hover:bg-green-900 transition-colors uppercase font-mono font-bold">Restore Transfers</button>
+                                            </div>
+                                          </div>
+                                          
+                                          <div className="grid grid-cols-3 gap-2">
+                                            <select 
+                                              value={userTokenForm.tokenId}
+                                              onChange={(e) => setUserTokenForm({...userTokenForm, tokenId: e.target.value})}
+                                              className="p-1.5 bg-neutral-900 border border-neutral-800 rounded text-[10px] font-mono text-neutral-300 focus:outline-none"
+                                            >
+                                              <option value="">-- Select Token --</option>
+                                              {tokens.map(t => <option key={t.id} value={t.id}>{t.symbol}</option>)}
+                                            </select>
+                                            <input 
+                                              type="number"
+                                              placeholder="Amount"
+                                              value={userTokenForm.amount}
+                                              onChange={(e) => setUserTokenForm({...userTokenForm, amount: e.target.value})}
+                                              className="p-1.5 bg-neutral-900 border border-neutral-800 rounded text-[10px] font-mono text-neutral-300 focus:outline-none"
+                                            />
+                                            <input 
+                                              type="text"
+                                              placeholder="Description (Optional)"
+                                              value={userTokenForm.description}
+                                              onChange={(e) => setUserTokenForm({...userTokenForm, description: e.target.value})}
+                                              className="p-1.5 bg-neutral-900 border border-neutral-800 rounded text-[10px] font-mono text-neutral-300 focus:outline-none"
+                                            />
+                                          </div>
+                                          
+                                          <div className="flex flex-wrap gap-2">
+                                            <button onClick={() => handleUserTokenAction(usr.id, 'credit')} className="text-[9px] bg-neutral-900 text-neutral-300 border border-neutral-700 px-2 py-1 rounded hover:bg-neutral-800 transition-colors uppercase font-mono font-bold">Credit Token</button>
+                                            <button onClick={() => handleUserTokenAction(usr.id, 'debit')} className="text-[9px] bg-neutral-900 text-neutral-300 border border-neutral-700 px-2 py-1 rounded hover:bg-neutral-800 transition-colors uppercase font-mono font-bold">Debit Token</button>
+                                            <button onClick={() => handleUserTokenAction(usr.id, 'freeze')} className="text-[9px] bg-blue-950/40 text-blue-400 border border-blue-900 px-2 py-1 rounded hover:bg-blue-900 transition-colors uppercase font-mono font-bold">Freeze Balance</button>
+                                            <button onClick={() => handleUserTokenAction(usr.id, 'unfreeze')} className="text-[9px] bg-blue-950/40 text-blue-400 border border-blue-900 px-2 py-1 rounded hover:bg-blue-900 transition-colors uppercase font-mono font-bold">Unfreeze Balance</button>
+                                          </div>
+                                          
+                                          {userManageMsg && (
+                                            <div className={`p-2 mt-1 rounded text-[9px] font-mono ${userManageMsg.type === 'success' ? 'bg-green-950/20 text-green-500 border border-green-500/20' : 'bg-red-950/20 text-red-500 border border-red-500/20'}`}>
+                                              {userManageMsg.text}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+<div className="grid grid-cols-2 gap-3.5 text-[10px] font-mono">
                                         <div className="p-2.5 bg-neutral-950/50 rounded border border-neutral-950">
                                           <span className="text-neutral-500 uppercase text-[8px] font-bold block mb-1">Registration Date</span>
                                           <span className="text-neutral-300 font-semibold">{new Date(usr.createdAt).toLocaleString()}</span>
@@ -1277,7 +1411,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                               <input
                                 type="number"
                                 value={editDecimals}
-                                onChange={(e) => setEditDecimals(parseInt(e.target.value))}
+                                onChange={(e) => setEditDecimals(e.target.value)}
                                 min={0}
                                 max={18}
                                 required
@@ -1296,6 +1430,35 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                                 className="p-2.5 bg-neutral-950 border border-neutral-800 rounded-lg text-xs font-mono text-red-400"
                               />
                             </div>
+
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] text-neutral-500 font-mono uppercase">Buy Price (USD)</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={editBuyPrice}
+                                onChange={(e) => setEditBuyPrice(e.target.value)}
+                                className="p-2.5 bg-neutral-950 border border-neutral-800 rounded-lg text-xs font-mono text-green-400 focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] text-neutral-500 font-mono uppercase">Sell Price (USD)</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={editSellPrice}
+                                onChange={(e) => setEditSellPrice(e.target.value)}
+                                className="p-2.5 bg-neutral-950 border border-neutral-800 rounded-lg text-xs font-mono text-red-400 focus:outline-none"
+                              />
+                            </div>
+                            <div className="col-span-2 flex items-center justify-between p-2 bg-neutral-950 border border-neutral-800 rounded-lg">
+                              <span className="text-[10px] text-neutral-500 font-mono uppercase">Auto Price Feed (Oracle)</span>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked={editAutoPrice} onChange={(e) => setEditAutoPrice(e.target.checked)} className="sr-only peer" />
+                                <div className="w-9 h-5 bg-neutral-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                              </label>
+                            </div>
+
                           </div>
 
                           <div className="flex flex-col gap-1">
@@ -1376,7 +1539,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                             >
                               Status: {editActive ? 'Active' : 'Inactive'}
                             </button>
-                          </div>
+</div>
 
                           {editMsg && (
                             <div className={`p-3 border rounded-lg text-[10px] font-mono ${
@@ -1433,7 +1596,7 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                               <input
                                 type="number"
                                 value={newTokenDecimals}
-                                onChange={(e) => setNewTokenDecimals(parseInt(e.target.value))}
+                                onChange={(e) => setNewTokenDecimals(e.target.value)}
                                 min={0}
                                 max={18}
                                 required
@@ -1979,6 +2142,15 @@ export default function AdminPanel({ onClose }: AdminPanelProps) {
                       </div>
                     </motion.div>
                   )}
+                
+                  {activeTab === 'settings' && <SystemSettings />}
+                  {activeTab === 'broadcast' && <BroadcastCenter />}
+                  {activeTab === 'reports' && <Reports />}
+                  {activeTab === 'monitor' && <SystemMonitor />}
+                  {activeTab === 'backup' && <BackupCenter />}
+                  {activeTab === 'maintenance' && <MaintenanceMode />}
+                  {activeTab === 'api' && <ApiManagement />}
+                  {activeTab === 'security_logs' && <SecurityLogs />}
                 </AnimatePresence>
               )}
             </div>

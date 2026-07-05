@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 
 interface Notification {
-  id: number;
-  user_id: number;
+  id: string;
+  user_id: string;
   title: string;
   message: string;
   is_read: boolean;
@@ -64,7 +64,7 @@ export function NotificationCenter({
     localStorage.setItem('nest_silent_mode', String(nextVal));
   };
 
-  const handleMarkAsRead = async (id: number) => {
+  const handleMarkAsRead = async (id: string) => {
     try {
       // Optimistic update
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
@@ -83,7 +83,7 @@ export function NotificationCenter({
     }
   };
 
-  const handleDeleteNotification = async (id: number) => {
+  const handleDeleteNotification = async (id: string) => {
     try {
       // Optimistic update
       setNotifications(prev => prev.filter(n => n.id !== id));

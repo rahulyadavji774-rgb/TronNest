@@ -1,5 +1,5 @@
 {
-  "name": "TronNest",
+  "name": "TronNest Crypto Wallet Pro",
   "description": "TronNest is a complete production-ready, Android-first TRON (TRX, USDT TRC20) and Custom Token Cryptocurrency Wallet built with React, Node.js, Express, and a premium Glassmorphic dark aesthetic.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

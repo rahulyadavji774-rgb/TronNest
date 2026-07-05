@@ -15,8 +15,8 @@ interface SecuritySettings {
 }
 
 interface LoginLog {
-  id: number;
-  actor_id: number;
+  id: string;
+  actor_id: string;
   action: string;
   status: string;
   device: string;
@@ -25,7 +25,7 @@ interface LoginLog {
 }
 
 interface TrustDevice {
-  id: number;
+  id: string;
   device_name: string;
   user_agent: string;
   ip_address: string;
@@ -137,7 +137,7 @@ export function SecurityCenter({
 
     // Also update global settings in localStorage for immediate client-side logic
     if (updates.autoLockDuration !== undefined) {
-      localStorage.setItem(`nest_security_autolock_${address}`, updates.autoLockDuration);
+      localStorage.setItem(`nest_security_autolock_${address}`, updates.autoLockDuration.toString());
     }
     if (updates.privacyModeEnabled !== undefined) {
       localStorage.setItem(`nest_security_privacymode_${address}`, String(updates.privacyModeEnabled));
@@ -161,7 +161,7 @@ export function SecurityCenter({
     } catch (_) {}
   };
 
-  const handleDeleteDevice = async (id: number) => {
+  const handleDeleteDevice = async (id: string) => {
     try {
       setDevices(prev => prev.filter(d => d.id !== id));
       await fetch(`/api/wallet/security/trusted-device/${id}`, {
@@ -540,7 +540,7 @@ export function SecurityCenter({
                     <label className="text-[10px] text-neutral-400 font-mono uppercase">Clipboard Auto-Clear Timeout</label>
                     <select
                       value={settings.clipboardAutoclearSeconds}
-                      onChange={(e) => handleUpdateSetting({ clipboardAutoclearSeconds: parseInt(e.target.value) })}
+                      onChange={(e) => handleUpdateSetting({ clipboardAutoclearSeconds: e.target.value })}
                       className="w-full bg-neutral-900 border border-neutral-850 p-3 rounded-xl text-xs text-neutral-200 outline-none focus:border-red-500/50 transition-all font-mono"
                     >
                       <option value="15">Clear clipboard after 15 seconds</option>

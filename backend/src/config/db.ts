@@ -1,21 +1,56 @@
-import fs from 'fs';
-import path from 'path';
+import { eq, and } from 'drizzle-orm';
+import { getDb, schema } from '../db';
+import { v4 as uuidv4 } from 'uuid';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+function snakeToCamel(str: string) {
+  return str.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
+}
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+function camelToSnake(str: string) {
+  return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+}
+
+function convertKeysToCamel(obj: any) {
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const newObj: any = {};
+  for (const key in obj) {
+    newObj[snakeToCamel(key)] = obj[key];
+  }
+  return newObj;
+}
+
+function convertKeysToSnake(obj: any) {
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const newObj: any = {};
+  for (const key in obj) {
+    newObj[camelToSnake(key)] = obj[key];
+  }
+  return newObj;
+}
+
+function getTable(tableName: string) {
+  const camelTableName = snakeToCamel(tableName);
+  if ((schema as any)[camelTableName]) return (schema as any)[camelTableName];
+  if ((schema as any)[tableName]) return (schema as any)[tableName];
+  throw new Error(`Table ${tableName} not found in schema`);
+}
+
+function buildWhereClause(table: any, conditions: any) {
+  const parts: any[] = [];
+  for (const [key, value] of Object.entries(conditions)) {
+    const colName = snakeToCamel(key);
+    if (table[colName]) {
+      parts.push(eq(table[colName], value));
+    }
+  }
+  if (parts.length === 0) return undefined;
+  if (parts.length === 1) return parts[0];
+  return and(...parts);
 }
 
 export class JsonDatabase {
   private static instance: JsonDatabase;
-  private cache: Record<string, any[]> = {};
-
-  private constructor() {
-    this.initDefaultTables();
-  }
-
+  private constructor() {}
   public static getInstance(): JsonDatabase {
     if (!JsonDatabase.instance) {
       JsonDatabase.instance = new JsonDatabase();
@@ -23,260 +58,80 @@ export class JsonDatabase {
     return JsonDatabase.instance;
   }
 
-  private getTablePath(tableName: string): string {
-    return path.join(DATA_DIR, `${tableName}.json`);
+  public async transaction<T = any>(callback: (tx: any) => Promise<T>): Promise<T> {
+    const db = getDb();
+    return await db.transaction(callback);
   }
 
-  private loadTable<T>(tableName: string): T[] {
-    if (this.cache[tableName]) {
-      return this.cache[tableName] as T[];
-    }
-    const filePath = this.getTablePath(tableName);
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2));
-      this.cache[tableName] = [];
-      return [];
-    }
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      const data = JSON.parse(content);
-      this.cache[tableName] = data;
-      return data as T[];
-    } catch (e) {
-      console.error(`Error loading table ${tableName}, resetting table:`, e);
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2));
-      this.cache[tableName] = [];
-      return [];
-    }
+  public async query<T = any>(tableName: string, tx?: any): Promise<T[]> {
+    const db = tx || getDb();
+    const table = getTable(tableName);
+    const rows = await db.select().from(table);
+    return rows.map(convertKeysToSnake) as T[];
   }
 
-  private saveTable<T>(tableName: string, data: T[]): void {
-    this.cache[tableName] = data;
-    const filePath = this.getTablePath(tableName);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  public async findById<T extends { id: string } = any>(tableName: string, id: string, tx?: any): Promise<T | null> {
+    const db = tx || getDb();
+    const table = getTable(tableName);
+    const rows = await db.select().from(table).where(eq(table.id, id)).limit(1);
+    if (!rows.length) return null;
+    return convertKeysToSnake(rows[0]) as T;
   }
 
-  private initDefaultTables() {
-    // Initialise default table lists
-    const tables = [
-      'users',
-      'wallets',
-      'wallet_security',
-      'tokens',
-      'token_prices',
-      'balances',
-      'internal_ledger',
-      'blockchain_transactions',
-      'transaction_history',
-      'sessions',
-      'notifications',
-      'admins',
-      'admin_logs',
-      'wallet_logs',
-      'devices',
-      'audit_logs',
-      'app_settings',
-      'network_settings',
-    ];
-
-    for (const table of tables) {
-      this.loadTable(table);
+  public async findOne<T = any>(tableName: string, conditions: any, tx?: any): Promise<T | null> {
+    const db = tx || getDb();
+    const table = getTable(tableName);
+    
+    if (typeof conditions === 'function') {
+      const rows = await this.query<T>(tableName, db);
+      return rows.find(conditions) || null;
     }
 
-    // Seed default tokens if empty
-    const tokens = this.loadTable<any>('tokens');
-    if (tokens.length === 0) {
-      const defaultTokens = [
-        {
-          id: 1,
-          name: 'TRON',
-          symbol: 'TRX',
-          decimals: 6,
-          logo_url: 'https://cryptologos.cc/logos/tron-trx-logo.png',
-          is_visible: true,
-          is_transfer_enabled: true,
-          is_active: true,
-          is_internal: false,
-          contract_address: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: 2,
-          name: 'Tether USD',
-          symbol: 'USDT',
-          decimals: 6,
-          logo_url: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
-          is_visible: true,
-          is_transfer_enabled: true,
-          is_active: true,
-          is_internal: false,
-          contract_address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: 3,
-          name: 'Nest Dollar',
-          symbol: 'mUSD',
-          decimals: 6,
-          logo_url: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=200&auto=format&fit=crop',
-          is_visible: true,
-          is_transfer_enabled: true,
-          is_active: true,
-          is_internal: true,
-          contract_address: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: 4,
-          name: 'Gold Nest',
-          symbol: 'GOLD',
-          decimals: 2,
-          logo_url: 'https://images.unsplash.com/photo-1610375228911-2f073259b662?q=80&w=200&auto=format&fit=crop',
-          is_visible: true,
-          is_transfer_enabled: true,
-          is_active: true,
-          is_internal: true,
-          contract_address: null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ];
-      this.saveTable('tokens', defaultTokens);
-    }
-
-    // Seed token prices if empty
-    const prices = this.loadTable<any>('token_prices');
-    if (prices.length === 0) {
-      const defaultPrices = [
-        { id: 1, token_id: 1, price_usd: 0.125, updated_at: new Date().toISOString() },
-        { id: 2, token_id: 2, price_usd: 1.00, updated_at: new Date().toISOString() },
-        { id: 3, token_id: 3, price_usd: 1.00, updated_at: new Date().toISOString() },
-        { id: 4, token_id: 4, price_usd: 75.50, updated_at: new Date().toISOString() },
-      ];
-      this.saveTable('token_prices', defaultPrices);
-    }
-
-    // Seed default admin if empty
-    const admins = this.loadTable<any>('admins');
-    if (admins.length === 0) {
-      // password_hash is bcrypt hash for "Admin@TronNest123"
-      admins.push({
-        id: 1,
-        username: 'admin_root',
-        password_hash: '$2b$12$fTz4K2o0eCOi7ncoQhV8D.hRz1A5pC56zQ7rJ1X5/V11S9jZlFz36',
-        role: 'root',
-        created_at: new Date().toISOString(),
-      });
-      admins.push({
-        id: 2,
-        username: 'admin_super',
-        password_hash: '$2b$12$fTz4K2o0eCOi7ncoQhV8D.hRz1A5pC56zQ7rJ1X5/V11S9jZlFz36',
-        role: 'root',
-        created_at: new Date().toISOString(),
-      });
-      admins.push({
-        id: 3,
-        username: 'admin_editor',
-        password_hash: '$2b$12$fTz4K2o0eCOi7ncoQhV8D.hRz1A5pC56zQ7rJ1X5/V11S9jZlFz36',
-        role: 'editor',
-        created_at: new Date().toISOString(),
-      });
-      admins.push({
-        id: 4,
-        username: 'admin_viewer',
-        password_hash: '$2b$12$fTz4K2o0eCOi7ncoQhV8D.hRz1A5pC56zQ7rJ1X5/V11S9jZlFz36',
-        role: 'viewer',
-        created_at: new Date().toISOString(),
-      });
-      this.saveTable('admins', admins);
-    }
-
-    // Seed default AppSettings
-    const appSettings = this.loadTable<any>('app_settings');
-    if (appSettings.length === 0) {
-      const defaults = [
-        { id: 1, setting_key: 'min_withdrawal_fee_trx', setting_value: '2.0', updated_at: new Date().toISOString() },
-        { id: 2, setting_key: 'support_email', setting_value: 'support@tronnest.com', updated_at: new Date().toISOString() },
-        { id: 3, setting_key: 'allow_internal_transfers', setting_value: 'true', updated_at: new Date().toISOString() },
-      ];
-      this.saveTable('app_settings', defaults);
-    }
-
-    // Seed default NetworkSettings
-    const networkSettings = this.loadTable<any>('network_settings');
-    if (networkSettings.length === 0) {
-      const defaults = [
-        {
-          id: 1,
-          network_name: 'mainnet',
-          full_node_url: 'https://api.trongrid.io',
-          solidity_node_url: 'https://api.trongrid.io',
-          event_server_url: 'https://api.trongrid.io',
-          usdt_contract_address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-          updated_at: new Date().toISOString(),
-        },
-      ];
-      this.saveTable('network_settings', defaults);
-    }
+    const where = buildWhereClause(table, conditions);
+    const query = db.select().from(table);
+    const rows = where ? await query.where(where).limit(1) : await query.limit(1);
+    
+    if (!rows.length) return null;
+    return convertKeysToSnake(rows[0]) as T;
   }
 
-  // Relational Operations
-  public query<T>(tableName: string): T[] {
-    return this.loadTable<T>(tableName);
+  public async findMany<T = any>(tableName: string, conditions: any, tx?: any): Promise<T[]> {
+    const db = tx || getDb();
+    const table = getTable(tableName);
+    
+    if (typeof conditions === 'function') {
+      const rows = await this.query<T>(tableName, db);
+      return rows.filter(conditions);
+    }
+
+    const where = buildWhereClause(table, conditions);
+    const query = db.select().from(table);
+    const rows = where ? await query.where(where) : await query;
+    return rows.map(convertKeysToSnake) as T[];
   }
 
-  public findById<T extends { id: number }>(tableName: string, id: number): T | null {
-    const list = this.loadTable<T>(tableName);
-    return list.find((item) => item.id === id) || null;
-  }
-
-  public findOne<T>(tableName: string, predicate: (item: T) => boolean): T | null {
-    const list = this.loadTable<T>(tableName);
-    return list.find(predicate) || null;
-  }
-
-  public findMany<T>(tableName: string, predicate: (item: T) => boolean): T[] {
-    const list = this.loadTable<T>(tableName);
-    return list.filter(predicate);
-  }
-
-  public insert<T extends { id?: number }>(tableName: string, item: T): T {
-    const list = this.loadTable<T>(tableName);
-    const nextId = list.reduce((max, item: any) => (item.id > max ? item.id : max), 0) + 1;
-    const newItem = {
-      ...item,
-      id: nextId,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+  public async insert<T extends { id?: string } = any>(tableName: string, item: T, tx?: any): Promise<T> {
+    const db = tx || getDb();
+    const newItem: any = {
+      id: uuidv4(),
+      ...convertKeysToCamel(item)
     };
-    list.push(newItem);
-    this.saveTable(tableName, list);
-    return newItem;
+    const table = getTable(tableName);
+    await db.insert(table).values(newItem);
+    return convertKeysToSnake(newItem) as T;
   }
 
-  public update<T extends { id: number }>(tableName: string, id: number, updates: any): T | null {
-    const list = this.loadTable<T>(tableName);
-    const index = list.findIndex((item) => item.id === id);
-    if (index === -1) return null;
-    const updatedItem = {
-      ...list[index],
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
-    list[index] = updatedItem;
-    this.saveTable(tableName, list);
-    return updatedItem;
+  public async update<T extends { id: string } = any>(tableName: string, id: string, updates: any, tx?: any): Promise<T | null> {
+    const db = tx || getDb();
+    const table = getTable(tableName);
+    await db.update(table).set(convertKeysToCamel(updates)).where(eq(table.id, id));
+    return this.findById<T>(tableName, id, db);
   }
 
-  public delete(tableName: string, id: number): boolean {
-    const list = this.loadTable<any>(tableName);
-    const index = list.findIndex((item) => item.id === id);
-    if (index === -1) return false;
-    list.splice(index, 1);
-    this.saveTable(tableName, list);
+  public async delete(tableName: string, id: string, tx?: any): Promise<boolean> {
+    const db = tx || getDb();
+    const table = getTable(tableName);
+    await db.delete(table).where(eq(table.id, id));
     return true;
   }
 }

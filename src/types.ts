@@ -1,7 +1,7 @@
 // TronNest Client TypeScript Types
 
 export interface Token {
-  id: number;
+  id: string;
   name: string;
   symbol: string;
   decimals: number;
@@ -14,8 +14,8 @@ export interface Token {
 }
 
 export interface Transaction {
-  id: number;
-  wallet_id: number;
+  id: string;
+  wallet_id: string;
   type: 'blockchain' | 'internal';
   direction: 'in' | 'out' | 'self';
   asset_symbol: string;
@@ -24,14 +24,14 @@ export interface Transaction {
   fee: number;
   status: 'pending' | 'completed' | 'failed';
   tx_hash: string | null;
-  internal_ledger_id: number | null;
-  blockchain_tx_id: number | null;
+  internal_ledger_id: string | null;
+  blockchain_tx_id: string | null;
   created_at: string;
 }
 
 export interface Notification {
-  id: number;
-  user_id: number;
+  id: string;
+  user_id: string;
   title: string;
   message: string;
   is_read: boolean;
@@ -39,7 +39,7 @@ export interface Notification {
 }
 
 export interface UserProfile {
-  id: number;
+  id: string;
   address: string;
   status: 'active' | 'frozen' | 'suspended';
   createdAt: string;
@@ -50,7 +50,7 @@ export interface UserProfile {
 }
 
 export interface AuditLog {
-  id: number;
+  id: string;
   username?: string;
   action: string;
   ipAddress: string;

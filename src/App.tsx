@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, Info, Smartphone, AlertCircle, RefreshCw, Layers } from 'lucide-react';
-import AndroidHeader from './components/AndroidHeader';
 import PasscodeScreen from './components/PasscodeScreen';
 import WelcomeScreen from './components/WelcomeScreen';
 import DashboardScreen from './components/DashboardScreen';
@@ -52,7 +51,7 @@ export default function App() {
     if (isLocked || !address || autoLockDuration === 'off') return;
 
     let timer: NodeJS.Timeout;
-    const durationMs = parseInt(autoLockDuration) * 60 * 1000;
+    const durationMs = autoLockDuration * 60 * 1000;
 
     const resetInactivityTimer = () => {
       clearTimeout(timer);
@@ -92,7 +91,7 @@ export default function App() {
         }
       } else {
         // Foreground return
-        const lastActive = parseInt(localStorage.getItem(`nest_last_active_time_${address}`) || '0');
+        const lastActive = parseInt(localStorage.getItem(`nest_last_active_time_${address}`) || '0', 10);
         const elapsedMs = Date.now() - lastActive;
         const fiveMinutesMs = 5 * 60 * 1000;
 
@@ -300,9 +299,6 @@ export default function App() {
         <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-32 h-5 bg-black rounded-full z-50 hidden sm:block flex items-center justify-center">
           <div className="w-2 h-2 rounded-full bg-neutral-950 border border-neutral-800 ml-auto mr-4" />
         </div>
-
-        {/* Android Status Bar */}
-        <AndroidHeader />
 
         {/* Dynamic App Screens */}
         <div className="flex-1 relative overflow-hidden">
