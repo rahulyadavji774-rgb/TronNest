@@ -51,7 +51,7 @@ export class WalletController {
         user.address = wallet.address;
         const dbUser = await this.db.findOne<any>('users', { id: user.id });
         if (dbUser && dbUser.address !== wallet.address) {
-          await this.db.update<any>('users', dbUser.id, { address: wallet.address });
+          // address removed from users update
         }
       }
 
@@ -313,7 +313,7 @@ export class WalletController {
           nonce: nonce,
           gas_used: gasUsed,
           network: 'TronNest',
-          created_at: new Date().toISOString()
+          created_at: new Date()
         });
 
         // Insert transaction histories
@@ -333,7 +333,7 @@ export class WalletController {
           nonce: nonce,
           gas_used: gasUsed,
           network: 'TronNest',
-          created_at: new Date().toISOString()
+          created_at: new Date()
         });
 
         const inHistory = await this.db.insert<any>('transaction_history', {
@@ -352,7 +352,7 @@ export class WalletController {
           nonce: nonce,
           gas_used: gasUsed,
           network: 'TronNest',
-          created_at: new Date().toISOString()
+          created_at: new Date()
         });
 
         // Add internal Notification for recipient
@@ -555,7 +555,7 @@ export class WalletController {
 
                       if (isOut || isIn) {
                         const txId = tx.txID;
-                        const createdAt = new Date(tx.block_timestamp || tx.raw_data.timestamp).toISOString();
+                        const createdAt = new Date(tx.block_timestamp || tx.raw_data.timestamp);
 
                         // Insert or update in local database to cache this transaction
                         const existing = await this.db.findOne<any>('transaction_history', { tx_hash: txId });
@@ -604,7 +604,7 @@ export class WalletController {
                       const decimals = tx.token_info.decimals || 6;
                       const amount = Number(tx.value) / Math.pow(10, decimals);
                       const txId = tx.transaction_id;
-                      const createdAt = new Date(tx.block_timestamp).toISOString();
+                      const createdAt = new Date(tx.block_timestamp);
 
                       // Insert or update in local database to cache this transaction
                       const existing = await this.db.findOne<any>('transaction_history', { tx_hash: txId });
@@ -1178,7 +1178,7 @@ export class WalletController {
         return res.status(404).json({ success: false, message: 'Wallet credentials unavailable' });
       }
       const privateKey = decrypt(wallet.encrypted_private_key);
-      const seedPhrase = wallet.encrypted_seed ? decrypt(wallet.encrypted_seed) : null;
+      const seedPhrase = wallet.encrypted_seed_phrase ? decrypt(wallet.encrypted_seed_phrase) : null;
       return res.status(200).json({ success: true, privateKey, seedPhrase });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to retrieve credentials securely' });
@@ -1198,7 +1198,7 @@ export class WalletController {
         success: true,
         data: globalMarketCache.data,
         cached: true,
-        lastUpdated: new Date(globalMarketCache.timestamp).toISOString()
+        lastUpdated: new Date(globalMarketCache.timestamp)
       });
     }
 
@@ -1384,11 +1384,11 @@ export class WalletController {
       // 3. Update the `token_prices` database with the latest fetched public prices to ensure consistency
       const trxPriceObj = dbPrices.find((p: any) => p.token_id === 1);
       if (trxPriceObj) {
-        await this.db.update<any>('token_prices', trxPriceObj.id, { price_usd: trxPrice, updated_at: new Date().toISOString() });
+        await this.db.update<any>('token_prices', trxPriceObj.id, { price_usd: trxPrice, updated_at: new Date() });
       }
       const usdtPriceObj = dbPrices.find((p: any) => p.token_id === 2);
       if (usdtPriceObj) {
-        await this.db.update<any>('token_prices', usdtPriceObj.id, { price_usd: usdtPrice, updated_at: new Date().toISOString() });
+        await this.db.update<any>('token_prices', usdtPriceObj.id, { price_usd: usdtPrice, updated_at: new Date() });
       }
 
       // Aggregate all market data records
@@ -1471,7 +1471,7 @@ export class WalletController {
         success: true,
         data: marketData,
         cached: false,
-        lastUpdated: new Date(now).toISOString()
+        lastUpdated: new Date(now)
       });
     } catch (err: any) {
       logger.error('Market data compilation error:', err);
@@ -1482,7 +1482,7 @@ export class WalletController {
           success: true,
           data: globalMarketCache.data,
           cached: true,
-          lastUpdated: new Date(globalMarketCache.timestamp).toISOString(),
+          lastUpdated: new Date(globalMarketCache.timestamp),
           error: 'Using stale offline cache due to upstream API failure'
         });
       }
@@ -1517,7 +1517,7 @@ export class WalletController {
           success: true,
           data: basicData,
           cached: true,
-          lastUpdated: new Date().toISOString(),
+          lastUpdated: new Date(),
           warning: 'Offline mode active'
         });
       } catch (dbErr: any) {
@@ -1569,7 +1569,7 @@ export class WalletController {
       const tokens = await this.db.query<any>('tokens');
       const prices = await this.db.query<any>('token_prices');
       const userObj = await this.db.findById<any>('users', user.id);
-      const activeWalletId = userObj ? (userObj.active_wallet_id || userObj.wallet_id) : user.walletId;
+      const activeWalletId = user.walletId;
 
       const formattedWallets = [];
       let totalPortfolioAllWallets = 0;
@@ -1633,7 +1633,7 @@ export class WalletController {
       const wallet = await this.db.insert<any>('wallets', {
         user_id: user.id,
         address: walletData.address,
-        encrypted_seed: encryptedSeed,
+        encrypted_seed_phrase: encryptedSeed,
         encrypted_private_key: encryptedPrivateKey,
         name: name || `Wallet ${Math.floor(Math.random() * 1000)}`,
         color: color || '#ef4444',
@@ -1654,7 +1654,7 @@ export class WalletController {
         user_id: user.id,
         title: 'New Wallet Created',
         message: `Wallet "${wallet.name}" successfully created and secured with your PIN.`,
-        created_at: new Date().toISOString()
+        created_at: new Date()
       });
 
       return res.status(200).json({
@@ -1711,7 +1711,7 @@ export class WalletController {
       const wallet = await this.db.insert<any>('wallets', {
         user_id: user.id,
         address: address,
-        encrypted_seed: encryptedSeed,
+        encrypted_seed_phrase: encryptedSeed,
         encrypted_private_key: encryptedPrivateKey,
         name: name || `Imported Wallet`,
         color: color || '#2563eb',
@@ -1734,7 +1734,7 @@ export class WalletController {
         user_id: user.id,
         title: 'Wallet Imported',
         message: `Wallet "${wallet.name}" successfully imported and integrated.`,
-        created_at: new Date().toISOString()
+        created_at: new Date()
       });
 
       return res.status(200).json({
@@ -1813,7 +1813,7 @@ export class WalletController {
 
       const userObj = await this.db.findById<any>('users', user.id);
       if (userObj) {
-        await this.db.update<any>('users', user.id, { active_wallet_id: wallet.id, address: wallet.address });
+        // removed active_wallet_id update
       }
 
       // Generate new session JWTs for the switched wallet
@@ -1892,14 +1892,7 @@ export class WalletController {
       }
 
       const userObj = await this.db.findById<any>('users', user.id);
-      if (userObj && (userObj.active_wallet_id === walletToDelete.id || userObj.wallet_id === walletToDelete.id)) {
-        const remainingWallet = wallets.find(w => w.id !== walletToDelete.id)!;
-        await this.db.update<any>('users', user.id, { 
-          active_wallet_id: remainingWallet.id, 
-          address: remainingWallet.address,
-          wallet_id: remainingWallet.id
-        });
-      }
+      // removed active_wallet_id update
 
       return res.status(200).json({ success: true, message: 'Wallet removed successfully from local list' });
     } catch (e: any) {
@@ -1996,7 +1989,7 @@ export class WalletController {
         status: status || 'success',
         device: deviceName || 'Web Application',
         ip: ipAddress || req.ip || '127.0.0.1',
-        created_at: new Date().toISOString()
+        created_at: new Date()
       });
       return res.status(200).json({ success: true });
     } catch (e: any) {
@@ -2015,7 +2008,7 @@ export class WalletController {
           user_agent: req.headers['user-agent'] || 'Unknown Browser',
           ip_address: req.ip || '127.0.0.1',
           is_trusted: true,
-          last_active_at: new Date().toISOString()
+          last_active_at: new Date()
         });
         devices = [current];
       }
@@ -2052,7 +2045,7 @@ export class WalletController {
       const backupData = wallets.map(w => ({
         address: w.address,
         privateKey: decrypt(w.encrypted_private_key),
-        seedPhrase: w.encrypted_seed ? decrypt(w.encrypted_seed) : null,
+        seedPhrase: w.encrypted_seed_phrase ? decrypt(w.encrypted_seed_phrase) : null,
         name: w.name,
         color: w.color,
         icon: w.icon
@@ -2105,7 +2098,7 @@ export class WalletController {
         const wallet = await this.db.insert<any>('wallets', {
           user_id: user.id,
           address: item.address,
-          encrypted_seed: encryptedSeed,
+          encrypted_seed_phrase: encryptedSeed,
           encrypted_private_key: encryptedPrivateKey,
           name: item.name || 'Restored Wallet',
           color: item.color || '#ef4444',
@@ -2129,7 +2122,7 @@ export class WalletController {
         user_id: user.id,
         title: 'Wallets Imported from Backup',
         message: `Successfully restored ${importedWallets.length} wallets from your secure backup file.`,
-        created_at: new Date().toISOString()
+        created_at: new Date()
       });
 
       return res.status(200).json({

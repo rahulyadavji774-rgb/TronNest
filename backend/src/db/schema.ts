@@ -9,7 +9,7 @@ import {
   decimal,
   json,
   index
-} from 'drizzle-orm/mysql-core';
+, bigint } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -36,8 +36,11 @@ export const users = mysqlTable('users', {
   username: varchar('username', { length: 100 }).unique(),
   email: varchar('email', { length: 255 }).unique(),
   passwordHash: varchar('password_hash', { length: 255 }),
+  passcodeHash: varchar('passcode_hash', { length: 255 }),
   seedPhraseHash: varchar('seed_phrase_hash', { length: 255 }).unique(),
   status: varchar('status', { length: 50 }).default('active').notNull(),
+  failedAttempts: int('failed_attempts').default(0),
+  lockedUntil: timestamp('locked_until'),
   lastLogin: timestamp('last_login'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow().notNull()
@@ -156,6 +159,8 @@ export const sessions = mysqlTable('sessions', {
   token: varchar('token', { length: 512 }).notNull().unique(),
   refreshToken: varchar('refresh_token', { length: 512 }).unique(),
   expiresAt: timestamp('expires_at').notNull(),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  userAgent: text('user_agent'),
   createdAt: timestamp('created_at').defaultNow().notNull()
 });
 
@@ -192,6 +197,7 @@ export const internalLedger = mysqlTable('internal_ledger', {
   amount: decimal('amount', { precision: 36, scale: 18 }),
   type: varchar('type', { length: 50 }),
   status: varchar('status', { length: 50 }),
+  txHash: varchar('tx_hash', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow()
 });
 
@@ -202,6 +208,10 @@ export const blockchainTransactions = mysqlTable('blockchain_transactions', {
   tokenId: char('token_id', { length: 36 }),
   amount: decimal('amount', { precision: 36, scale: 18 }),
   status: varchar('status', { length: 50 }),
+  txHash: varchar('tx_hash', { length: 255 }),
+  fromAddress: varchar('from_address', { length: 255 }),
+  toAddress: varchar('to_address', { length: 255 }),
+  fee: decimal('fee', { precision: 36, scale: 18 }),
   createdAt: timestamp('created_at').defaultNow()
 });
 
@@ -214,6 +224,15 @@ export const transactionHistory = mysqlTable('transaction_history', {
   status: varchar('status', { length: 50 }),
   txHash: varchar('tx_hash', { length: 255 }),
   internalLedgerId: char('internal_ledger_id', { length: 36 }),
+  direction: varchar('direction', { length: 50 }),
+  assetSymbol: varchar('asset_symbol', { length: 50 }),
+  counterparty: varchar('counterparty', { length: 255 }),
+  fee: decimal('fee', { precision: 36, scale: 18 }),
+  blockHeight: bigint('block_height', { mode: 'number' }),
+  nonce: bigint('nonce', { mode: 'number' }),
+  gasUsed: varchar('gas_used', { length: 255 }),
+  network: varchar('network', { length: 100 }),
+  blockchainTxId: char('blockchain_tx_id', { length: 36 }),
   createdAt: timestamp('created_at').defaultNow()
 });
 
@@ -238,6 +257,10 @@ export const walletLogs = mysqlTable('wallet_logs', {
   id: char('id', { length: 36 }).primaryKey().$defaultFn(() => uuidv4()),
   walletId: char('wallet_id', { length: 36 }),
   action: varchar('action', { length: 255 }),
+  actorId: char('actor_id', { length: 36 }),
+  status: varchar('status', { length: 50 }),
+  device: varchar('device', { length: 255 }),
+  ip: varchar('ip', { length: 45 }),
   createdAt: timestamp('created_at').defaultNow()
 });
 
@@ -246,6 +269,10 @@ export const devices = mysqlTable('devices', {
   userId: char('user_id', { length: 36 }),
   deviceInfo: varchar('device_info', { length: 255 }),
   lastActive: timestamp('last_active'),
+  deviceName: varchar('device_name', { length: 255 }),
+  userAgent: text('user_agent'),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  isTrusted: boolean('is_trusted').default(false),
   createdAt: timestamp('created_at').defaultNow()
 });
 

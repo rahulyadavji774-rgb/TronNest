@@ -81,13 +81,13 @@ export class AuthController {
       const seedHash = crypto.createHash('sha256').update(seedPhrase.trim().toLowerCase()).digest('hex');
 
       // Bcrypt hash the passcode
-      const passcodeHash = await bcrypt.hash(passcode, 12);
+      const passcode_hash = await bcrypt.hash(passcode, 12);
 
       // Create user entry with unified passcode
       const user = await this.db.insert<any>('users', {
         seed_phrase_hash: seedHash,
         status: 'active',
-        passcode_hash: passcodeHash,
+        passcode_hash: passcode_hash,
         failed_attempts: 0,
         locked_until: null
       });
@@ -100,9 +100,11 @@ export class AuthController {
       const wallet = await this.db.insert<any>('wallets', {
         user_id: user.id,
         address: address,
-        encrypted_seed: encryptedSeed,
+        encrypted_seed_phrase: encryptedSeed,
         encrypted_private_key: encryptedPrivateKey
       });
+
+      // removed active_wallet_id update
 
       // Create initial balance records for TRX, USDT and default internal tokens (mUSD, GOLD)
       const tokens = await this.db.query<any>('tokens');
@@ -137,7 +139,7 @@ export class AuthController {
         refresh_token: refreshToken,
         ip_address: String(ipAddress),
         user_agent: String(userAgent),
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       });
 
       // Create audit log
@@ -244,21 +246,21 @@ export class AuthController {
           
           const seedHash = crypto.createHash('sha256').update(seedPhrase.trim().toLowerCase()).digest('hex');
           
-          const passcodeHash = await bcrypt.hash(passcode, 12);
+          const passcode_hash = await bcrypt.hash(passcode, 12);
           let user = await this.db.findOne('users', { seed_phrase_hash: seedHash });
           if (!user) {
             logger.info('[Unlock Flow - Server] Creating new database user record...');
             user = await this.db.insert<any>('users', {
               seed_phrase_hash: seedHash,
               status: 'active',
-              passcode_hash: passcodeHash,
+              passcode_hash: passcode_hash,
               failed_attempts: 0,
               locked_until: null
             });
           } else {
             logger.info('[Unlock Flow - Server] Updating existing database user record passcode...');
             await this.db.update('users', user.id, {
-              passcode_hash: passcodeHash
+              passcode_hash: passcode_hash
             });
           }
 
@@ -270,7 +272,7 @@ export class AuthController {
           wallet = await this.db.insert<any>('wallets', {
             user_id: user.id,
             address: address,
-            encrypted_seed: encryptedSeed,
+            encrypted_seed_phrase: encryptedSeed,
             encrypted_private_key: encryptedPrivateKey
           });
 
@@ -326,7 +328,7 @@ export class AuthController {
         refresh_token: refreshToken,
         ip_address: String(ipAddress),
         user_agent: String(userAgent),
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       });
 
       await this.db.insert<any>('audit_logs', {
@@ -405,7 +407,7 @@ export class AuthController {
       await this.db.update('sessions', activeSession.id, {
         token: newToken,
         refresh_token: newRefreshToken,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
       });
 
       return res.status(200).json({

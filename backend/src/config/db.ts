@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import { eq, and } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { v4 as uuidv4 } from 'uuid';
@@ -116,15 +117,58 @@ export class JsonDatabase {
       id: uuidv4(),
       ...convertKeysToCamel(item)
     };
+    
     const table = getTable(tableName);
-    await db.insert(table).values(newItem);
+    
+    // Strict schema validation: Ensure all provided keys exist in the Drizzle table schema
+    const schemaKeys = Object.keys(table);
+    const providedKeys = typeof newItem !== 'undefined' ? Object.keys(newItem) : Object.keys(convertKeysToCamel(updates));
+    for (const key of providedKeys) {
+      if (!schemaKeys.includes(key)) {
+        logger.warn(`[Drizzle ORM Warning] Field '${key}' is present in the payload but MISSING from the ${tableName} schema definition! Drizzle will silently discard it.`);
+      }
+    }
+    
+    try {
+
+      console.log("INSERT DEBUG:", tableName, JSON.stringify(newItem));
+      await db.insert(table).values(newItem);
+    } catch (error: any) {
+      logger.error(`Failed query in insert: ${tableName}`);
+      logger.error(`error message: ${error.message}`);
+      logger.error(`error cause: ${error.cause}`);
+      logger.error(`error stack: ${error.stack}`);
+      logger.error(`parameters: ${JSON.stringify(newItem)}`);
+      throw error;
+    }
     return convertKeysToSnake(newItem) as T;
   }
 
   public async update<T extends { id: string } = any>(tableName: string, id: string, updates: any, tx?: any): Promise<T | null> {
     const db = tx || getDb();
+    
     const table = getTable(tableName);
-    await db.update(table).set(convertKeysToCamel(updates)).where(eq(table.id, id));
+    
+    // Strict schema validation: Ensure all provided keys exist in the Drizzle table schema
+    const schemaKeys = Object.keys(table);
+    const providedKeys = typeof newItem !== 'undefined' ? Object.keys(newItem) : Object.keys(convertKeysToCamel(updates));
+    for (const key of providedKeys) {
+      if (!schemaKeys.includes(key)) {
+        logger.warn(`[Drizzle ORM Warning] Field '${key}' is present in the payload but MISSING from the ${tableName} schema definition! Drizzle will silently discard it.`);
+      }
+    }
+    
+    try {
+
+      await db.update(table).set(convertKeysToCamel(updates)).where(eq(table.id, id));
+    } catch (error: any) {
+      logger.error(`Failed query in update: ${tableName}`);
+      logger.error(`error message: ${error.message}`);
+      logger.error(`error cause: ${error.cause}`);
+      logger.error(`error stack: ${error.stack}`);
+      logger.error(`parameters: ${JSON.stringify(updates)}`);
+      throw error;
+    }
     return this.findById<T>(tableName, id, db);
   }
 

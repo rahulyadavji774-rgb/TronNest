@@ -72,7 +72,7 @@ export async function verifyPasscodeWithRateLimit(walletIdOrUserId: any, passcod
     const nextFailedAttempts = (user.failed_attempts || 0) + 1;
     let lockedUntil = null;
     if (nextFailedAttempts >= 5) {
-      lockedUntil = new Date(Date.now() + 60 * 1000).toISOString(); // 60 seconds lockout
+      lockedUntil = new Date(Date.now() + 60 * 1000); // 60 seconds lockout
     }
     await db.update('users', user.id, {
       failed_attempts: nextFailedAttempts,
