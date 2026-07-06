@@ -5,39 +5,6 @@
     "id": 1,
     "created_at": "2026-07-04T07:27:09.589Z",
     "updated_at": "2026-07-04T07:27:09.589Z",
-    "transfers_suspended": true,
-    "passcode_hash": "$2b$12$rn6zlob7S1EQ6WVZEPir5uSLvHO9y9xyrPfi5qJ8t63KO9F6u8PC6"
-  },
-  {
-    "id": "f62196e2-266d-4ccb-abc3-349ca910c3cf",
-    "seed_phrase_hash": "ccded7aa05e00bd20bda70645b798b495f8657a25d8113b660f58c293c6d0fec",
-    "status": "active",
-    "passcode_hash": "$2b$12$z3dGbdGtYqmDHoTP2pHT6OBuRd05dzPp3k6BKCSrLUcsl8Vtu54oW",
-    "failed_attempts": 0,
-    "locked_until": null
-  },
-  {
-    "id": "71475653-e7df-4577-bd44-d549d84e6c92",
-    "seed_phrase_hash": "110d1d8b6629848d98a7ff79a38f67de171c01b81f4e29b988cc50e384b1ba0b",
-    "status": "active",
-    "passcode_hash": "$2b$12$HD15zW19AfTmxHpEM.Y7MesQ6FwpMYgztfvo8Stu9SsKT6UnSJFOK",
-    "failed_attempts": 0,
-    "locked_until": null
-  },
-  {
-    "id": "3baad1d1-e401-40f0-a9eb-b4bc7872c010",
-    "seed_phrase_hash": "da1707e7bd5690ac86ba8493a6833d9ac2f924d04865f487b61cc86ee59ce52c",
-    "status": "active",
-    "passcode_hash": "$2b$12$6IgQjy8BXy4ZnYeoe4E.aeGu30beQ.QEtquy3raLjvnFpIdPN5b9.",
-    "failed_attempts": 0,
-    "locked_until": null
-  },
-  {
-    "id": "7dec710f-ca3b-4273-bb11-8076b2931b8a",
-    "seed_phrase_hash": "c17138cf125081defb43cf9ed94209ed1c04bb406540bf491e6c12f28f06df40",
-    "status": "active",
-    "passcode_hash": "$2b$12$SAH0mS3sebeBkiz12VBe2O4KmO/TFcnJs7PmJPwnE1oa3.iyemany",
-    "failed_attempts": 0,
-    "locked_until": null
+    "transfers_suspended": true
   }
 ]

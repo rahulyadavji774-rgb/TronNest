@@ -16,6 +16,22 @@
     "updated_at": "2026-07-04T07:28:31.404Z"
   },
   {
+    "wallet_id": 1,
+    "token_id": 3,
+    "balance": 100020,
+    "id": 3,
+    "created_at": "2026-07-01T11:35:40.630Z",
+    "updated_at": "2026-07-01T11:35:40.630Z"
+  },
+  {
+    "wallet_id": 1,
+    "token_id": 4,
+    "balance": 100,
+    "id": 4,
+    "created_at": "2026-07-01T11:35:40.630Z",
+    "updated_at": "2026-07-01T11:35:40.630Z"
+  },
+  {
     "id": "5a941656-b97c-4aff-8a71-c69fc5bf0a90",
     "wallet_id": "890706fa-5b04-4acc-854d-08cb8a366bb4",
     "token_id": 1,
@@ -25,6 +41,18 @@
     "id": "0b621237-c254-4d09-b6f7-345f0eee4434",
     "wallet_id": "890706fa-5b04-4acc-854d-08cb8a366bb4",
     "token_id": 2,
+    "balance": 0
+  },
+  {
+    "id": "d9f0539a-b8b2-48c5-82bf-6ebb2032ebcc",
+    "wallet_id": "890706fa-5b04-4acc-854d-08cb8a366bb4",
+    "token_id": 3,
+    "balance": 0
+  },
+  {
+    "id": "9355f764-1485-462b-b33e-6f6acbd1480c",
+    "wallet_id": "890706fa-5b04-4acc-854d-08cb8a366bb4",
+    "token_id": 4,
     "balance": 0
   },
   {
@@ -40,6 +68,24 @@
     "balance": 0
   },
   {
+    "id": "d389a06f-a2d2-412f-981e-54b986082f48",
+    "wallet_id": "8f1f7d0c-3b59-4cf1-be95-f2915d6bcab2",
+    "token_id": 3,
+    "balance": 110
+  },
+  {
+    "id": "16516630-7cc8-45de-ae07-3737bf46ce33",
+    "wallet_id": "8f1f7d0c-3b59-4cf1-be95-f2915d6bcab2",
+    "token_id": 4,
+    "balance": 0
+  },
+  {
+    "id": "c13a6a39-b61a-4784-8245-413067a7fa81",
+    "wallet_id": "8f1f7d0c-3b59-4cf1-be95-f2915d6bcab2",
+    "token_id": "dc7fa392-1b47-4961-873a-4f84514af7f3",
+    "balance": 0
+  },
+  {
     "id": "94369f40-0a30-4ae9-8768-b18f2238b3e0",
     "wallet_id": "e44f6bab-3479-4a47-a7a6-094cbce5af1d",
     "token_id": 1,
@@ -49,6 +95,24 @@
     "id": "90eef14b-9261-41a5-8726-52734ce14843",
     "wallet_id": "e44f6bab-3479-4a47-a7a6-094cbce5af1d",
     "token_id": 2,
+    "balance": 0
+  },
+  {
+    "id": "8b1d4b13-798d-44b4-8948-ddb3e52615c1",
+    "wallet_id": "e44f6bab-3479-4a47-a7a6-094cbce5af1d",
+    "token_id": 3,
+    "balance": 10
+  },
+  {
+    "id": "4474c988-181b-435c-ad91-0e16a0855f60",
+    "wallet_id": "e44f6bab-3479-4a47-a7a6-094cbce5af1d",
+    "token_id": 4,
+    "balance": 0
+  },
+  {
+    "id": "8ccbbde6-5f28-44d4-8320-e31d86b0462f",
+    "wallet_id": "e44f6bab-3479-4a47-a7a6-094cbce5af1d",
+    "token_id": "dc7fa392-1b47-4961-873a-4f84514af7f3",
     "balance": 0
   },
   {
@@ -97,84 +161,6 @@
     "id": "39a9762c-9817-434d-af92-8aed91422aea",
     "wallet_id": "126fa3e3-f4ba-4a9d-b23a-fe634aabda1a",
     "token_id": "0936a0ed-1e6e-4db8-9f68-9dfb7a204a0a",
-    "balance": 0
-  },
-  {
-    "id": "81ba1c94-6321-4386-a7ba-38900c983867",
-    "wallet_id": "a6580655-3029-47d9-9c36-7064b5a7e905",
-    "token_id": 1,
-    "balance": 0
-  },
-  {
-    "id": "f5eba951-82a2-4805-bc70-76ea236ca45e",
-    "wallet_id": "a6580655-3029-47d9-9c36-7064b5a7e905",
-    "token_id": 2,
-    "balance": 0
-  },
-  {
-    "id": "6bb967d8-e99d-41bf-99f2-480f6f9b6b1a",
-    "wallet_id": "5264f02a-11b7-4944-a16a-b4d533c9e952",
-    "token_id": 1,
-    "balance": 0
-  },
-  {
-    "id": "0c109e1a-d2bb-407c-857b-6563c675de90",
-    "wallet_id": "5264f02a-11b7-4944-a16a-b4d533c9e952",
-    "token_id": 2,
-    "balance": 0
-  },
-  {
-    "id": "8a23e8bc-337b-4792-b47a-c43247373822",
-    "wallet_id": "9e1c9c33-8c71-4379-b7b9-6772db666d98",
-    "token_id": 1,
-    "balance": 0
-  },
-  {
-    "id": "57794693-6b3d-46d4-8ac9-7e471b14a3ca",
-    "wallet_id": "9e1c9c33-8c71-4379-b7b9-6772db666d98",
-    "token_id": 2,
-    "balance": 0
-  },
-  {
-    "id": "1c09591f-113f-4823-80db-e81c986a161a",
-    "wallet_id": "9e1c9c33-8c71-4379-b7b9-6772db666d98",
-    "token_id": "f8435a81-14d0-4de9-baac-f5dc6433257c",
-    "balance": 0
-  },
-  {
-    "id": "fb7875ea-ab56-41ec-9d3c-1714a858b694",
-    "wallet_id": "4bcfbe98-6685-4d07-85a8-50727c1663bd",
-    "token_id": 1,
-    "balance": 0
-  },
-  {
-    "id": "2c1b7d5c-956d-4248-9180-907983196321",
-    "wallet_id": "4bcfbe98-6685-4d07-85a8-50727c1663bd",
-    "token_id": 2,
-    "balance": 0
-  },
-  {
-    "id": "28536bb0-0cf2-4b54-9a72-b2e9b69e47dc",
-    "wallet_id": "4bcfbe98-6685-4d07-85a8-50727c1663bd",
-    "token_id": "f8435a81-14d0-4de9-baac-f5dc6433257c",
-    "balance": 0
-  },
-  {
-    "id": "ede2bb48-518e-4ce1-a62e-afe1aff0d84c",
-    "wallet_id": "569a1aa9-602c-44ee-b4c2-816b4efef7b6",
-    "token_id": 1,
-    "balance": 0
-  },
-  {
-    "id": "3b0140c1-4191-4f05-9ad4-e18afd39aea7",
-    "wallet_id": "569a1aa9-602c-44ee-b4c2-816b4efef7b6",
-    "token_id": 2,
-    "balance": 0
-  },
-  {
-    "id": "4167dcf3-be97-4350-8caf-c0a852c4b0d3",
-    "wallet_id": "569a1aa9-602c-44ee-b4c2-816b4efef7b6",
-    "token_id": "f8435a81-14d0-4de9-baac-f5dc6433257c",
     "balance": 0
   }
 ]

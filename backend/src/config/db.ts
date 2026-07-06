@@ -70,12 +70,27 @@ export class JsonDatabase {
   }
 
   public async query<T>(tableName: string): Promise<T[]> {
-    return (await this.readLocalData(tableName)) as T[];
+    const db = getDb();
+    if (db && !db._mock) {
+      const table = getTable(tableName);
+      const rows = await db.select().from(table);
+      return rows.map(convertKeysToSnake) as T[];
+    } else {
+      return (await this.readLocalData(tableName)) as T[];
+    }
   }
 
   public async findById<T extends { id: string }>(tableName: string, id: string): Promise<T | null> {
-    const rows = await this.query<T>(tableName);
-    return rows.find((r: any) => String(r.id) === String(id)) || null;
+    const db = getDb();
+    if (db && !db._mock) {
+      const table = getTable(tableName);
+      const rows = await db.select().from(table).where(eq(table.id, id)).limit(1);
+      if (!rows.length) return null;
+      return convertKeysToSnake(rows[0]) as T;
+    } else {
+      const rows = await this.query<T>(tableName);
+      return rows.find((r: any) => String(r.id) === String(id)) || null;
+    }
   }
 
   public async findOne<T>(tableName: string, predicate: (item: T) => boolean): Promise<T | null> {
@@ -89,86 +104,54 @@ export class JsonDatabase {
   }
 
   public async insert<T extends { id?: string }>(tableName: string, item: T): Promise<T> {
-    // 1. Write to JSON (source of truth)
-    const data = await this.readLocalData(tableName);
-    const id = item.id || uuidv4();
-    const snakeItem = {
-      id,
-      ...convertKeysToSnake(item)
-    };
-    data.push(snakeItem);
-    await this.writeLocalData(tableName, data);
-
-    // 2. Write to MariaDB (dual write)
     const db = getDb();
+    const newItem: any = {
+      id: uuidv4(),
+      ...convertKeysToCamel(item)
+    };
     if (db && !db._mock) {
-      try {
-        const table = getTable(tableName);
-        const camelItem = convertKeysToCamel(snakeItem);
-        
-        const safeCamelItem: any = {};
-        for (const key in camelItem) {
-          if (table[key]) {
-            safeCamelItem[key] = camelItem[key];
-          }
-        }
-        await db.insert(table).values(safeCamelItem);
-      } catch (err: any) {
-        console.error(`[MariaDB Dual-Write Insert Error] Table: ${tableName}, Error: ${err.message}`);
-      }
+      const table = getTable(tableName);
+      await db.insert(table).values(newItem);
+      return convertKeysToSnake(newItem) as T;
+    } else {
+      const data = await this.readLocalData(tableName);
+      const snakeItem = {
+        id: newItem.id,
+        ...convertKeysToSnake(item)
+      };
+      data.push(snakeItem);
+      await this.writeLocalData(tableName, data);
+      return snakeItem as T;
     }
-
-    return snakeItem as T;
   }
 
   public async update<T extends { id: string }>(tableName: string, id: string, updates: any): Promise<T | null> {
-    // 1. Write to JSON (source of truth)
-    const data = await this.readLocalData(tableName);
-    const index = data.findIndex((r: any) => String(r.id) === String(id));
-    if (index === -1) return null;
-    data[index] = { ...data[index], ...convertKeysToSnake(updates) };
-    await this.writeLocalData(tableName, data);
-    const updatedItem = data[index];
-
-    // 2. Write to MariaDB (dual write)
     const db = getDb();
     if (db && !db._mock) {
-      try {
-        const table = getTable(tableName);
-        const camelUpdates = convertKeysToCamel(updates);
-        
-        const safeCamelUpdates: any = {};
-        for (const key in camelUpdates) {
-          if (table[key]) {
-            safeCamelUpdates[key] = camelUpdates[key];
-          }
-        }
-        await db.update(table).set(safeCamelUpdates).where(eq(table.id, id));
-      } catch (err: any) {
-        console.error(`[MariaDB Dual-Write Update Error] Table: ${tableName}, ID: ${id}, Error: ${err.message}`);
-      }
+      const table = getTable(tableName);
+      await db.update(table).set(convertKeysToCamel(updates)).where(eq(table.id, id));
+      return this.findById<T>(tableName, id);
+    } else {
+      const data = await this.readLocalData(tableName);
+      const index = data.findIndex((r: any) => String(r.id) === String(id));
+      if (index === -1) return null;
+      data[index] = { ...data[index], ...convertKeysToSnake(updates) };
+      await this.writeLocalData(tableName, data);
+      return data[index] as T;
     }
-
-    return updatedItem as T;
   }
 
   public async delete(tableName: string, id: string): Promise<boolean> {
-    // 1. Write to JSON (source of truth)
-    let data = await this.readLocalData(tableName);
-    data = data.filter((r: any) => String(r.id) !== String(id));
-    await this.writeLocalData(tableName, data);
-
-    // 2. Write to MariaDB (dual write)
     const db = getDb();
     if (db && !db._mock) {
-      try {
-        const table = getTable(tableName);
-        await db.delete(table).where(eq(table.id, id));
-      } catch (err: any) {
-        console.error(`[MariaDB Dual-Write Delete Error] Table: ${tableName}, ID: ${id}, Error: ${err.message}`);
-      }
+      const table = getTable(tableName);
+      await db.delete(table).where(eq(table.id, id));
+      return true;
+    } else {
+      let data = await this.readLocalData(tableName);
+      data = data.filter((r: any) => String(r.id) !== String(id));
+      await this.writeLocalData(tableName, data);
+      return true;
     }
-
-    return true;
   }
 }

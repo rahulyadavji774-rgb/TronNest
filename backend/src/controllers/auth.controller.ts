@@ -3,7 +3,6 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { JsonDatabase } from '../config/db';
-import { UserRepository } from '../repositories/user.repository';
 import { encrypt, decrypt } from '../utils/crypto';
 import { TronService } from '../services/tron.service';
 import { logger } from '../utils/logger';
@@ -13,7 +12,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'TronNest_SuperSecureJWTSalt_2026';
 
 export class AuthController {
   private db = JsonDatabase.getInstance();
-  private userRepo = UserRepository.getInstance();
   private tronService = TronService.getInstance();
 
   /**
@@ -42,7 +40,7 @@ export class AuthController {
       // Calculate a unique sha256 hash of the seed phrase to detect duplicates
       const seedHash = crypto.createHash('sha256').update(walletData.seedPhrase.trim().toLowerCase()).digest('hex');
       
-      const existingUser = await this.userRepo.findOne(u => u.seed_phrase_hash === seedHash);
+      const existingUser = await this.db.findOne<any>('users', u => u.seed_phrase_hash === seedHash);
       if (existingUser) {
         return res.status(400).json({
           success: false,
@@ -86,7 +84,7 @@ export class AuthController {
       const passcodeHash = await bcrypt.hash(passcode, 12);
 
       // Create user entry with unified passcode
-      const user = await this.userRepo.insert( {
+      const user = await this.db.insert<any>('users', {
         seed_phrase_hash: seedHash,
         status: 'active',
         passcode_hash: passcodeHash,
@@ -184,7 +182,7 @@ export class AuthController {
       const seedHash = crypto.createHash('sha256').update(normalizedSeed).digest('hex');
 
       // Check if wallet exists in our DB
-      const existingUser = await this.userRepo.findOne(u => u.seed_phrase_hash === seedHash);
+      const existingUser = await this.db.findOne<any>('users', u => u.seed_phrase_hash === seedHash);
       if (existingUser) {
         const wallet = await this.db.findOne<any>('wallets', w => w.user_id === existingUser.id);
         if (!wallet) {
@@ -247,10 +245,10 @@ export class AuthController {
           const seedHash = crypto.createHash('sha256').update(seedPhrase.trim().toLowerCase()).digest('hex');
           
           const passcodeHash = await bcrypt.hash(passcode, 12);
-          let user = await this.userRepo.findOne(u => u.seed_phrase_hash === seedHash);
+          let user = await this.db.findOne<any>('users', u => u.seed_phrase_hash === seedHash);
           if (!user) {
             logger.info('[Unlock Flow - Server] Creating new database user record...');
-            user = await this.userRepo.insert( {
+            user = await this.db.insert<any>('users', {
               seed_phrase_hash: seedHash,
               status: 'active',
               passcode_hash: passcodeHash,
@@ -259,7 +257,7 @@ export class AuthController {
             });
           } else {
             logger.info('[Unlock Flow - Server] Updating existing database user record passcode...');
-            await this.userRepo.update( user.id, {
+            await this.db.update('users', user.id, {
               passcode_hash: passcodeHash
             });
           }
@@ -494,14 +492,14 @@ export class AuthController {
         return res.status(verifyRes.status!).json({ success: false, message: verifyRes.message });
       }
 
-      const user = await this.userRepo.findById(wallet.user_id);
+      const user = await this.db.findById<any>('users', wallet.user_id);
       if (!user) {
         return res.status(404).json({ success: false, message: 'User record missing' });
       }
 
       // Update with new passcode
       const newHash = await bcrypt.hash(newPasscode, 12);
-      await this.userRepo.update( user.id, {
+      await this.db.update('users', user.id, {
         passcode_hash: newHash,
         failed_attempts: 0
       });

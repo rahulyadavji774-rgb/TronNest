@@ -74,59 +74,5 @@
     "ip_address": "127.0.0.1",
     "user_agent": "node",
     "expires_at": "2026-07-11T09:01:34.066Z"
-  },
-  {
-    "id": "7c2047a3-3a2a-4da9-87c4-db3b87fd4874",
-    "user_id": "f62196e2-266d-4ccb-abc3-349ca910c3cf",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImY2MjE5NmUyLTI2NmQtNGNjYi1hYmMzLTM0OWNhOTEwYzNjZiIsIndhbGxldElkIjoiYTY1ODA2NTUtMzAyOS00N2Q5LTljMzYtNzA2NGI1YTdlOTA1IiwiYWRkcmVzcyI6IlRSZlpuYXJSTVVUWDZHeXc0QWh6V1VleUpMRlE3ZUh6U1AiLCJpYXQiOjE3ODMzMjUyNjksImV4cCI6MTc4MzMyNjE2OX0.mhhyHEgqUlPL1xDj5WL4G8jauOx02MiDCIib6d4kU0M",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImY2MjE5NmUyLTI2NmQtNGNjYi1hYmMzLTM0OWNhOTEwYzNjZiIsIndhbGxldElkIjoiYTY1ODA2NTUtMzAyOS00N2Q5LTljMzYtNzA2NGI1YTdlOTA1IiwiYWRkcmVzcyI6IlRSZlpuYXJSTVVUWDZHeXc0QWh6V1VleUpMRlE3ZUh6U1AiLCJpc1JlZnJlc2giOnRydWUsImlhdCI6MTc4MzMyNTI2OSwiZXhwIjoxNzgzOTMwMDY5fQ.sFW-qrO22gvX6eKHJ_m-hnUKetuoaVUQ7wXEtuLPucs",
-    "ip_address": "169.254.169.126",
-    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
-    "expires_at": "2026-07-13T08:07:49.661Z"
-  },
-  {
-    "id": "06b8894c-4731-4ac9-9571-7c2d54bca790",
-    "user_id": 1,
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwid2FsbGV0SWQiOiI1MjY0ZjAyYS0xMWI3LTQ5NDQtYTE2YS1iNGQ1MzNjOWU5NTIiLCJhZGRyZXNzIjoiVEZXcnJRYnJ1YlJvekc3ZzVGVDdaTXk1QVNKcnQxWHRHZyIsImlhdCI6MTc4MzMyNTI4MywiZXhwIjoxNzgzMzI2MTgzfQ.WeikoP40IwSeI7tjiMWRqk3i5W4dRnZr5vAHttAnERA",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwid2FsbGV0SWQiOiI1MjY0ZjAyYS0xMWI3LTQ5NDQtYTE2YS1iNGQ1MzNjOWU5NTIiLCJhZGRyZXNzIjoiVEZXcnJRYnJ1YlJvekc3ZzVGVDdaTXk1QVNKcnQxWHRHZyIsImlzUmVmcmVzaCI6dHJ1ZSwiaWF0IjoxNzgzMzI1MjgzLCJleHAiOjE3ODM5MzAwODN9.68rI3rFrTG0VPbPwa19F0eP9SiMQjRaZTJfkLm7ucOU",
-    "ip_address": "169.254.169.126",
-    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
-    "expires_at": "2026-07-13T08:08:03.089Z"
-  },
-  {
-    "id": "903c905a-39c8-4a02-bce0-c242f55b6319",
-    "user_id": 1,
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwid2FsbGV0SWQiOiI1MjY0ZjAyYS0xMWI3LTQ5NDQtYTE2YS1iNGQ1MzNjOWU5NTIiLCJhZGRyZXNzIjoiVEZXcnJRYnJ1YlJvekc3ZzVGVDdaTXk1QVNKcnQxWHRHZyIsImlhdCI6MTc4MzMyNjE4NSwiZXhwIjoxNzgzMzI3MDg1fQ.4b-BR-NTlQkKzGCVuuNrQe8qDwgstxIE_xXWJnGU50Q",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwid2FsbGV0SWQiOiI1MjY0ZjAyYS0xMWI3LTQ5NDQtYTE2YS1iNGQ1MzNjOWU5NTIiLCJhZGRyZXNzIjoiVEZXcnJRYnJ1YlJvekc3ZzVGVDdaTXk1QVNKcnQxWHRHZyIsImlzUmVmcmVzaCI6dHJ1ZSwiaWF0IjoxNzgzMzI2MTg1LCJleHAiOjE3ODM5MzA5ODV9.FEy8-yajKL8Dt47fABf8dl8SUj8qw8GBPY9lm4MApTQ",
-    "ip_address": "169.254.169.126",
-    "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
-    "expires_at": "2026-07-13T08:23:05.038Z"
-  },
-  {
-    "id": "0529e788-3105-45d6-af07-a2825c78bcd6",
-    "user_id": "71475653-e7df-4577-bd44-d549d84e6c92",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjcxNDc1NjUzLWU3ZGYtNDU3Ny1iZDQ0LWQ1NDlkODRlNmM5MiIsIndhbGxldElkIjoiOWUxYzljMzMtOGM3MS00Mzc5LWI3YjktNjc3MmRiNjY2ZDk4IiwiYWRkcmVzcyI6IlRUZTlIaVVaeTREWnoxOEI2RjhMS1YzWnF1V2lxS25ublciLCJpYXQiOjE3ODMzMjgwNDEsImV4cCI6MTc4MzMyODk0MX0.afOl8FSqNaqZym0PM70lLaXr9B74TtVCSDtRXT-3rbo",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjcxNDc1NjUzLWU3ZGYtNDU3Ny1iZDQ0LWQ1NDlkODRlNmM5MiIsIndhbGxldElkIjoiOWUxYzljMzMtOGM3MS00Mzc5LWI3YjktNjc3MmRiNjY2ZDk4IiwiYWRkcmVzcyI6IlRUZTlIaVVaeTREWnoxOEI2RjhMS1YzWnF1V2lxS25ublciLCJpc1JlZnJlc2giOnRydWUsImlhdCI6MTc4MzMyODA0MSwiZXhwIjoxNzgzOTMyODQxfQ.Uxf4blFL7EqIgc6cYIGTUv7X7-lzqLeRmBq9RvRCyTo",
-    "ip_address": "127.0.0.1",
-    "user_agent": "curl/7.88.1",
-    "expires_at": "2026-07-13T08:54:01.385Z"
-  },
-  {
-    "id": "bb2fd84e-e6fd-4021-8399-fa899d2f2e7a",
-    "user_id": "3baad1d1-e401-40f0-a9eb-b4bc7872c010",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjNiYWFkMWQxLWU0MDEtNDBmMC1hOWViLWI0YmM3ODcyYzAxMCIsIndhbGxldElkIjoiNGJjZmJlOTgtNjY4NS00ZDA3LTg1YTgtNTA3MjdjMTY2M2JkIiwiYWRkcmVzcyI6IlRMQjhEUFE1TkZzckV3d05oY3FrMVNtcWk3aDg1YkpqTHkiLCJpYXQiOjE3ODMzMjgxMDAsImV4cCI6MTc4MzMyOTAwMH0.QTFItPn-X_N0XTviZzvgM3eakNCILcXNuaZM1XO-E3A",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjNiYWFkMWQxLWU0MDEtNDBmMC1hOWViLWI0YmM3ODcyYzAxMCIsIndhbGxldElkIjoiNGJjZmJlOTgtNjY4NS00ZDA3LTg1YTgtNTA3MjdjMTY2M2JkIiwiYWRkcmVzcyI6IlRMQjhEUFE1TkZzckV3d05oY3FrMVNtcWk3aDg1YkpqTHkiLCJpc1JlZnJlc2giOnRydWUsImlhdCI6MTc4MzMyODEwMCwiZXhwIjoxNzgzOTMyOTAwfQ.8NMETUpgo72o3q57kOnHapvZdnIMP2acqMBig1zemGU",
-    "ip_address": "127.0.0.1",
-    "user_agent": "curl/7.88.1",
-    "expires_at": "2026-07-13T08:55:00.895Z"
-  },
-  {
-    "id": "187a63d1-b7b3-4f40-a821-9734b37f388a",
-    "user_id": "7dec710f-ca3b-4273-bb11-8076b2931b8a",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdkZWM3MTBmLWNhM2ItNDI3My1iYjExLTgwNzZiMjkzMWI4YSIsIndhbGxldElkIjoiNTY5YTFhYTktNjAyYy00NGVlLWI0YzItODE2YjRlZmVmN2I2IiwiYWRkcmVzcyI6IlRUZTlIaVVaeTREWnoxOEI2RjhMS1YzWnF1V2lxS25ublciLCJpYXQiOjE3ODMzMjk5MzksImV4cCI6MTc4MzMzMDgzOX0.ugX--1TgHMbEFi8bpZPy5FHjN-CSLBja28qqDfG4Y0c",
-    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdkZWM3MTBmLWNhM2ItNDI3My1iYjExLTgwNzZiMjkzMWI4YSIsIndhbGxldElkIjoiNTY5YTFhYTktNjAyYy00NGVlLWI0YzItODE2YjRlZmVmN2I2IiwiYWRkcmVzcyI6IlRUZTlIaVVaeTREWnoxOEI2RjhMS1YzWnF1V2lxS25ublciLCJpc1JlZnJlc2giOnRydWUsImlhdCI6MTc4MzMyOTkzOSwiZXhwIjoxNzgzOTM0NzM5fQ.Edd7wrlUeNQ4MfXaBddA0e7tHfawrM5GY--BlNbobJQ",
-    "ip_address": "127.0.0.1",
-    "user_agent": "curl/7.88.1",
-    "expires_at": "2026-07-13T09:25:39.071Z"
   }
 ]

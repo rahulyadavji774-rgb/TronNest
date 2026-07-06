@@ -3,7 +3,6 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { JsonDatabase } from '../config/db';
-import { UserRepository } from '../repositories/user.repository';
 import { logger } from '../utils/logger';
 import { clearMarketCache } from './wallet.controller';
 
@@ -11,7 +10,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'TronNest_SuperSecureJWTSalt_2026';
 
 export class AdminController {
   private db = JsonDatabase.getInstance();
-  private userRepo = UserRepository.getInstance();
 
   /**
    * Admin Login using credentials
@@ -70,7 +68,7 @@ export class AdminController {
    */
   public getDashboardStats = async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const users = await this.userRepo.query();
+      const users = await this.db.query<any>('users');
       const wallets = await this.db.query<any>('wallets');
       const tokens = await this.db.query<any>('tokens');
       const history = await this.db.query<any>('transaction_history');
@@ -107,7 +105,7 @@ export class AdminController {
    */
   public listUsers = async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const users = await this.userRepo.query();
+      const users = await this.db.query<any>('users');
       const wallets = await this.db.query<any>('wallets');
       const balances = await this.db.query<any>('balances');
       const tokens = await this.db.query<any>('tokens');
@@ -153,12 +151,12 @@ export class AdminController {
     }
 
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
 
-      await this.userRepo.update(user.id, { status: 'frozen' });
+      await this.db.update('users', user.id, { status: 'frozen' });
 
       // Audit log
       await this.db.insert<any>('admin_logs', {
@@ -200,12 +198,12 @@ export class AdminController {
     }
 
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
 
-      await this.userRepo.update(user.id, { status: 'active' });
+      await this.db.update('users', user.id, { status: 'active' });
 
       // Audit log
       await this.db.insert<any>('admin_logs', {
@@ -238,10 +236,10 @@ export class AdminController {
     const { userId } = req.body;
     const admin = req.admin!;
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-      await this.userRepo.update(user.id, { transfers_suspended: true });
+      await this.db.update('users', user.id, { transfers_suspended: true });
 
       await this.db.insert<any>('admin_logs', {
         admin_id: admin.id,
@@ -259,10 +257,10 @@ export class AdminController {
     const { userId } = req.body;
     const admin = req.admin!;
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-      await this.userRepo.update(user.id, { transfers_suspended: false });
+      await this.db.update('users', user.id, { transfers_suspended: false });
 
       await this.db.insert<any>('admin_logs', {
         admin_id: admin.id,
@@ -552,7 +550,7 @@ export class AdminController {
   public getUserBalances = async (req: AuthenticatedRequest, res: Response) => {
     const { userId } = req.params;
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
@@ -980,7 +978,7 @@ export class AdminController {
     const admin = req.admin!;
 
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       const wallet = await this.db.findOne<any>('wallets', w => w.user_id == user.id);
@@ -1016,7 +1014,7 @@ export class AdminController {
     const admin = req.admin!;
 
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       const wallet = await this.db.findOne<any>('wallets', w => w.user_id == user.id);
@@ -1047,7 +1045,7 @@ export class AdminController {
     const admin = req.admin!;
 
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       const wallet = await this.db.findOne<any>('wallets', w => w.user_id == user.id);
@@ -1110,7 +1108,7 @@ export class AdminController {
     }
 
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       const wallet = await this.db.findOne<any>('wallets', w => w.user_id == user.id);
@@ -1178,7 +1176,7 @@ export class AdminController {
     }
 
     try {
-      const user = await this.userRepo.findById(userId);
+      const user = await this.db.findById<any>('users', userId);
       if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
       const wallet = await this.db.findOne<any>('wallets', w => w.user_id == user.id);

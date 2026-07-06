@@ -5,7 +5,6 @@ import crypto from 'crypto';
 import { TronWeb } from 'tronweb';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { JsonDatabase } from '../config/db';
-import { UserRepository } from '../repositories/user.repository';
 import { TronService, withRetry } from '../services/tron.service';
 import { decrypt, encrypt } from '../utils/crypto';
 import { logger } from '../utils/logger';
@@ -13,7 +12,6 @@ import { verifyPasscodeWithRateLimit } from '../utils/security';
 
 export class WalletController {
   private db = JsonDatabase.getInstance();
-  private userRepo = UserRepository.getInstance();
   private tronService = TronService.getInstance();
 
   private historyCache = new Map<string, { data: any[]; timestamp: number }>();
@@ -51,9 +49,9 @@ export class WalletController {
       if (wallet && wallet.address !== user.address) {
         logger.warn(`[Address Mismatch Fix] user.address (${user.address}) != wallet.address (${wallet.address}). Syncing user.address to wallet.address.`);
         user.address = wallet.address;
-        const dbUser = await this.userRepo.findOne(u => u.id === user.id);
+        const dbUser = await this.db.findOne<any>('users', u => u.id === user.id);
         if (dbUser && dbUser.address !== wallet.address) {
-          await this.userRepo.update(dbUser.id, { address: wallet.address });
+          await this.db.update('users', dbUser.id, { address: wallet.address });
         }
       }
 
@@ -1568,7 +1566,7 @@ export class WalletController {
       const wallets = await this.db.findMany<any>('wallets', w => w.user_id === user.id);
       const tokens = await this.db.query<any>('tokens');
       const prices = await this.db.query<any>('token_prices');
-      const userObj = await this.userRepo.findById(user.id);
+      const userObj = await this.db.findById<any>('users', user.id);
       const activeWalletId = userObj ? (userObj.active_wallet_id || userObj.wallet_id) : user.walletId;
 
       const formattedWallets = [];
@@ -1811,9 +1809,9 @@ export class WalletController {
         return res.status(404).json({ success: false, message: 'Wallet not found' });
       }
 
-      const userObj = await this.userRepo.findById(user.id);
+      const userObj = await this.db.findById<any>('users', user.id);
       if (userObj) {
-        await this.userRepo.update(user.id, { active_wallet_id: wallet.id, address: wallet.address });
+        await this.db.update('users', user.id, { active_wallet_id: wallet.id, address: wallet.address });
       }
 
       // Generate new session JWTs for the switched wallet
@@ -1891,10 +1889,10 @@ export class WalletController {
         await this.db.delete('balances', b.id);
       }
 
-      const userObj = await this.userRepo.findById(user.id);
+      const userObj = await this.db.findById<any>('users', user.id);
       if (userObj && (userObj.active_wallet_id === walletToDelete.id || userObj.wallet_id === walletToDelete.id)) {
         const remainingWallet = wallets.find(w => w.id !== walletToDelete.id)!;
-        await this.userRepo.update( user.id, { 
+        await this.db.update('users', user.id, { 
           active_wallet_id: remainingWallet.id, 
           address: remainingWallet.address,
           wallet_id: remainingWallet.id
@@ -1931,7 +1929,7 @@ export class WalletController {
   public getSecuritySettings = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user!;
     try {
-      const userObj = await this.userRepo.findById(user.id);
+      const userObj = await this.db.findById<any>('users', user.id);
       if (!userObj) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
@@ -1954,7 +1952,7 @@ export class WalletController {
     const user = req.user!;
     try {
       const { biometricsEnabled, autoLockDuration, privacyModeEnabled, screenshotProtectionEnabled, clipboardAutoclearSeconds } = req.body;
-      const userObj = await this.userRepo.findById(user.id);
+      const userObj = await this.db.findById<any>('users', user.id);
       if (!userObj) {
         return res.status(404).json({ success: false, message: 'User not found' });
       }
@@ -1966,7 +1964,7 @@ export class WalletController {
       if (screenshotProtectionEnabled !== undefined) updates.screenshot_protection_enabled = !!screenshotProtectionEnabled;
       if (clipboardAutoclearSeconds !== undefined) updates.clipboard_autoclear_seconds = parseInt(clipboardAutoclearSeconds);
 
-      await this.userRepo.update(userObj.id, updates);
+      await this.db.update('users', userObj.id, updates);
       return res.status(200).json({ success: true, message: 'Security settings updated' });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to update security settings' });
