@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import helmet from 'helmet';
@@ -21,17 +20,8 @@ import { runBackgroundJobs } from './backend/src/services/SchedulerService';
 async function startServer() {
   // Initialize Database
   try {
-    
-    if (!process.env.DATABASE_URL) {
-      logger.error('CRITICAL ERROR: DATABASE_URL environment variable is missing.');
-      logger.error('TronNest now uses a production-ready MariaDB/MySQL database architecture.');
-      logger.error('Please configure DATABASE_URL to start the server.');
-      // We do not exit to prevent crash loop, but we will throw an error to stop boot.
-      throw new Error('DATABASE_URL missing');
-    }
     await initDb(process.env.DATABASE_URL);
-    logger.info('MariaDB/MySQL connected and migrations applied successfully.');
-
+    logger.info(process.env.DATABASE_URL ? 'MariaDB connected successfully' : 'Using Local JSON Database');
     
     // Health check
     try {
@@ -41,9 +31,25 @@ async function startServer() {
       const users = await db.query('users');
       logger.info(`Startup Health Check Passed: Wallets loaded: ${wallets.length}. Users loaded: ${users.length}.`);
 
-      
-      const { StartupService } = await import('./backend/src/services/StartupService');
-      await StartupService.runSystemRepair();
+      const tokens = await db.query('tokens');
+      if (tokens.length === 0) {
+        logger.info('No tokens found. Creating default MUSD token.');
+        const newToken = await db.insert<any>('tokens', {
+          name: 'TronNest USD',
+          symbol: 'MUSD',
+          decimals: 6,
+          logoUrl: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=200&auto=format&fit=crop',
+          description: 'TronNest USD Stablecoin',
+          is_visible: true,
+          is_transfer_enabled: true,
+          is_active: true,
+          is_internal: true
+        });
+        await db.insert<any>('token_prices', {
+          token_id: (newToken as any).id,
+          price_usd: 1.0
+        });
+      }
     } catch (e: any) {
       logger.error('Startup Health Check Failed: ' + e.message);
       process.exit(1);

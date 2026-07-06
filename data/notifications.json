@@ -1,0 +1,33 @@
+[
+  {
+    "id": "f55b6608-a353-4a2d-b8a5-352f4b435fe9",
+    "user_id": 1,
+    "title": "New Wallet Created",
+    "message": "Wallet \"New Nest Wallet\" successfully created and secured with your PIN.",
+    "created_at": "2026-07-04T08:37:24.068Z"
+  },
+  {
+    "id": "3aeae4e8-b109-4530-a42c-e1f751686249",
+    "user_id": 1,
+    "title": "System Credit",
+    "message": "Admin has minted and deposited 100 mUSD to your wallet."
+  },
+  {
+    "id": "161444a5-d5a7-4440-8b54-c84fd638cf8c",
+    "user_id": 1,
+    "title": "System Debit",
+    "message": "Admin has deducted 10 mUSD from your wallet balance."
+  },
+  {
+    "id": "ec79e918-ae83-4817-91cf-d6474ac5c933",
+    "user_id": 1,
+    "title": "Account Frozen",
+    "message": "Your cryptocurrency wallet has been administratively frozen. Please contact customer support immediately."
+  },
+  {
+    "id": "40ab32ab-8a99-43ba-b9c3-2b0e369a49b8",
+    "user_id": 1,
+    "title": "Account Restored",
+    "message": "Your cryptocurrency wallet has been restored to active status."
+  }
+]

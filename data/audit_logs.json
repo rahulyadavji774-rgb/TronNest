@@ -1,0 +1,156 @@
+[
+  {
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126",
+    "id": 1,
+    "created_at": "2026-07-04T07:27:10.196Z",
+    "updated_at": "2026-07-04T07:27:10.196Z"
+  },
+  {
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126",
+    "id": 2,
+    "created_at": "2026-07-04T07:28:07.880Z",
+    "updated_at": "2026-07-04T07:28:07.880Z"
+  },
+  {
+    "id": "6ac2b022-f8e0-4617-ab9e-61373437ac50",
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "4e943846-e8dd-421a-a277-96da7c4f6844",
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "294aae3c-bd4f-49e3-b8a8-d566a7955ae2",
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "1350c39f-d164-4a16-853f-4450088b4fa9",
+    "actor_type": "admin",
+    "actor_id": 5,
+    "action": "user_frozen",
+    "details": {
+      "userId": 1
+    },
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "b2fa7ca5-4710-4edf-a12f-da01e85ff2ef",
+    "actor_type": "admin",
+    "actor_id": 5,
+    "action": "user_unfrozen",
+    "details": {
+      "userId": 1
+    },
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "e750dff7-64d4-45b5-8644-7ce5eceffcf0",
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "aa1329ac-7587-46f5-a641-f738448e0694",
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "d3a1308a-d9d9-4689-9034-aeb2906dfffd",
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "6074d681-67cb-4531-8b42-78b8368519ec",
+    "actor_type": "user",
+    "actor_id": "f62196e2-266d-4ccb-abc3-349ca910c3cf",
+    "action": "login_success",
+    "details": {
+      "address": "TRfZnarRMUTX6Gyw4AhzWUeyJLFQ7eHzSP"
+    },
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "076ea1fb-b166-45d0-a6f5-1254cfacfe0d",
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "8c5131f9-a7ec-4724-9ee4-13330106f122",
+    "actor_type": "user",
+    "actor_id": 1,
+    "action": "login_success",
+    "details": {
+      "address": "TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg"
+    },
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "4e96a0e6-5f1f-48db-9431-b40fa8080ce8",
+    "actor_type": "user",
+    "actor_id": "71475653-e7df-4577-bd44-d549d84e6c92",
+    "action": "wallet_created",
+    "details": {
+      "address": "TTe9HiUZy4DZz18B6F8LKV3ZquWiqKnnnW"
+    },
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "f8326c04-b60e-4fda-86a3-799fec0050c5",
+    "actor_type": "user",
+    "actor_id": "3baad1d1-e401-40f0-a9eb-b4bc7872c010",
+    "action": "wallet_created",
+    "details": {
+      "address": "TLB8DPQ5NFsrEwwNhcqk1Smqi7h85bJjLy"
+    },
+    "ip_address": "127.0.0.1"
+  }
+]

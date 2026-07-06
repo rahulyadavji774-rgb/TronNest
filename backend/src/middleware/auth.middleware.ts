@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { JsonDatabase } from '../config/db';
+import { UserRepository } from '../repositories/user.repository';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'TronNest_SuperSecureJWTSalt_2026';
 
@@ -26,6 +27,7 @@ export async function authenticateUser(req: AuthenticatedRequest, res: Response,
   const token = authHeader.split(' ')[1];
   try {
     const db = JsonDatabase.getInstance();
+  const userRepo = UserRepository.getInstance();
     
     // Check if token exists in active sessions
     const activeSession = await db.findOne<any>('sessions', s => s.token === token);
@@ -41,7 +43,7 @@ export async function authenticateUser(req: AuthenticatedRequest, res: Response,
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     
     // Confirm wallet status and load current active state
-    const userObj = await db.findById<any>('users', decoded.id);
+    const userObj = await userRepo.findById(decoded.id);
     if (userObj && (userObj.status === 'suspended' || userObj.status === 'frozen')) {
       return res.status(403).json({ success: false, message: 'Your account has been frozen or suspended. Access denied.' });
     }

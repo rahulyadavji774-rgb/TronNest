@@ -1,23 +1,25 @@
 import bcrypt from 'bcrypt';
 import { JsonDatabase } from '../config/db';
+import { UserRepository } from '../repositories/user.repository';
 
 export async function verifyPasscodeWithRateLimit(walletIdOrUserId: any, passcode: string): Promise<{ success: boolean; message?: string; status?: number }> {
   const db = JsonDatabase.getInstance();
+  const userRepo = UserRepository.getInstance();
   
   // 1. Try to find the user by ID
-  let user = await db.findById<any>('users', walletIdOrUserId);
+  let user = await userRepo.findById(walletIdOrUserId);
   
   // 2. If not found, check if it's a wallet ID, then find the user for that wallet
   if (!user) {
     const wallet = await db.findById<any>('wallets', walletIdOrUserId);
     if (wallet) {
-      user = await db.findById<any>('users', wallet.user_id);
+      user = await userRepo.findById(wallet.user_id);
     }
   }
 
   // 3. If still not found, search users by wallet_id or active_wallet_id
   if (!user) {
-    user = await db.findOne<any>('users', u => u.wallet_id === walletIdOrUserId || u.active_wallet_id === walletIdOrUserId);
+    user = await userRepo.findOne(u => u.wallet_id === walletIdOrUserId || u.active_wallet_id === walletIdOrUserId);
   }
 
   if (!user) {
@@ -34,7 +36,7 @@ export async function verifyPasscodeWithRateLimit(walletIdOrUserId: any, passcod
     const security = await db.findOne<any>('wallet_security', s => walletIds.includes(s.wallet_id));
     if (security && security.passcode_hash) {
       // Copy to user record
-      await db.update('users', user.id, {
+      await userRepo.update( user.id, {
         passcode_hash: security.passcode_hash,
         failed_attempts: security.failed_attempts || 0,
         locked_until: security.locked_until || null
@@ -61,7 +63,7 @@ export async function verifyPasscodeWithRateLimit(walletIdOrUserId: any, passcod
     if (new Date(user.locked_until) > new Date()) {
       return { success: false, message: 'Too many incorrect PIN attempts. Please wait 60 seconds before trying again.', status: 403 };
     } else {
-      await db.update('users', user.id, { failed_attempts: 0, locked_until: null });
+      await userRepo.update(user.id, { failed_attempts: 0, locked_until: null });
       user.failed_attempts = 0;
       user.locked_until = null;
     }
@@ -72,9 +74,9 @@ export async function verifyPasscodeWithRateLimit(walletIdOrUserId: any, passcod
     const nextFailedAttempts = (user.failed_attempts || 0) + 1;
     let lockedUntil = null;
     if (nextFailedAttempts >= 5) {
-      lockedUntil = new Date(Date.now() + 60 * 1000); // 60 seconds lockout
+      lockedUntil = new Date(Date.now() + 60 * 1000).toISOString(); // 60 seconds lockout
     }
-    await db.update('users', user.id, {
+    await userRepo.update( user.id, {
       failed_attempts: nextFailedAttempts,
       locked_until: lockedUntil
     });
@@ -88,7 +90,7 @@ export async function verifyPasscodeWithRateLimit(walletIdOrUserId: any, passcod
 
   // Reset failed attempts on success
   if (user.failed_attempts > 0) {
-    await db.update('users', user.id, { failed_attempts: 0, locked_until: null });
+    await userRepo.update(user.id, { failed_attempts: 0, locked_until: null });
   }
 
   return { success: true };

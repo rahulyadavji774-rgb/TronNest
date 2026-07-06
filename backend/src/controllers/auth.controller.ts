@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { JsonDatabase } from '../config/db';
+import { UserRepository } from '../repositories/user.repository';
 import { encrypt, decrypt } from '../utils/crypto';
 import { TronService } from '../services/tron.service';
 import { logger } from '../utils/logger';
@@ -12,6 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'TronNest_SuperSecureJWTSalt_2026';
 
 export class AuthController {
   private db = JsonDatabase.getInstance();
+  private userRepo = UserRepository.getInstance();
   private tronService = TronService.getInstance();
 
   /**
@@ -23,7 +25,7 @@ export class AuthController {
       return res.status(400).json({ success: false, message: 'Address is required' });
     }
     try {
-      const wallet = await this.db.findOne('wallets', { address: address });
+      const wallet = await this.db.findOne<any>('wallets', w => w.address === address);
       return res.status(200).json({ success: true, isExistingUser: !!wallet });
     } catch (e: any) {
       return res.status(500).json({ success: false, message: 'Failed to verify address registration' });
@@ -40,7 +42,7 @@ export class AuthController {
       // Calculate a unique sha256 hash of the seed phrase to detect duplicates
       const seedHash = crypto.createHash('sha256').update(walletData.seedPhrase.trim().toLowerCase()).digest('hex');
       
-      const existingUser = await this.db.findOne('users', { seed_phrase_hash: seedHash });
+      const existingUser = await this.userRepo.findOne(u => u.seed_phrase_hash === seedHash);
       if (existingUser) {
         return res.status(400).json({
           success: false,
@@ -81,13 +83,13 @@ export class AuthController {
       const seedHash = crypto.createHash('sha256').update(seedPhrase.trim().toLowerCase()).digest('hex');
 
       // Bcrypt hash the passcode
-      const passcode_hash = await bcrypt.hash(passcode, 12);
+      const passcodeHash = await bcrypt.hash(passcode, 12);
 
       // Create user entry with unified passcode
-      const user = await this.db.insert<any>('users', {
+      const user = await this.userRepo.insert( {
         seed_phrase_hash: seedHash,
         status: 'active',
-        passcode_hash: passcode_hash,
+        passcode_hash: passcodeHash,
         failed_attempts: 0,
         locked_until: null
       });
@@ -100,11 +102,9 @@ export class AuthController {
       const wallet = await this.db.insert<any>('wallets', {
         user_id: user.id,
         address: address,
-        encrypted_seed_phrase: encryptedSeed,
+        encrypted_seed: encryptedSeed,
         encrypted_private_key: encryptedPrivateKey
       });
-
-      // removed active_wallet_id update
 
       // Create initial balance records for TRX, USDT and default internal tokens (mUSD, GOLD)
       const tokens = await this.db.query<any>('tokens');
@@ -139,7 +139,7 @@ export class AuthController {
         refresh_token: refreshToken,
         ip_address: String(ipAddress),
         user_agent: String(userAgent),
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       });
 
       // Create audit log
@@ -184,9 +184,9 @@ export class AuthController {
       const seedHash = crypto.createHash('sha256').update(normalizedSeed).digest('hex');
 
       // Check if wallet exists in our DB
-      const existingUser = await this.db.findOne('users', { seed_phrase_hash: seedHash });
+      const existingUser = await this.userRepo.findOne(u => u.seed_phrase_hash === seedHash);
       if (existingUser) {
-        const wallet = await this.db.findOne('wallets', { user_id: existingUser.id });
+        const wallet = await this.db.findOne<any>('wallets', w => w.user_id === existingUser.id);
         if (!wallet) {
           return res.status(404).json({ success: false, message: 'User exists but wallet structure is corrupted' });
         }
@@ -237,7 +237,7 @@ export class AuthController {
 
     try {
       logger.info('[Unlock Flow - Server] Step 1/4: Looking up wallet in database...');
-      let wallet = await this.db.findOne('wallets', { address: address });
+      let wallet = await this.db.findOne<any>('wallets', w => w.address === address);
       
       if (!wallet) {
         logger.warn('[Unlock Flow - Server] Wallet registration not found in database.');
@@ -246,21 +246,21 @@ export class AuthController {
           
           const seedHash = crypto.createHash('sha256').update(seedPhrase.trim().toLowerCase()).digest('hex');
           
-          const passcode_hash = await bcrypt.hash(passcode, 12);
-          let user = await this.db.findOne('users', { seed_phrase_hash: seedHash });
+          const passcodeHash = await bcrypt.hash(passcode, 12);
+          let user = await this.userRepo.findOne(u => u.seed_phrase_hash === seedHash);
           if (!user) {
             logger.info('[Unlock Flow - Server] Creating new database user record...');
-            user = await this.db.insert<any>('users', {
+            user = await this.userRepo.insert( {
               seed_phrase_hash: seedHash,
               status: 'active',
-              passcode_hash: passcode_hash,
+              passcode_hash: passcodeHash,
               failed_attempts: 0,
               locked_until: null
             });
           } else {
             logger.info('[Unlock Flow - Server] Updating existing database user record passcode...');
-            await this.db.update('users', user.id, {
-              passcode_hash: passcode_hash
+            await this.userRepo.update( user.id, {
+              passcode_hash: passcodeHash
             });
           }
 
@@ -272,14 +272,14 @@ export class AuthController {
           wallet = await this.db.insert<any>('wallets', {
             user_id: user.id,
             address: address,
-            encrypted_seed_phrase: encryptedSeed,
+            encrypted_seed: encryptedSeed,
             encrypted_private_key: encryptedPrivateKey
           });
 
           logger.info('[Unlock Flow - Server] Syncing and initializing token balances...');
           const tokens = await this.db.query<any>('tokens');
           for (const token of tokens) {
-            const existingBalance = await this.db.findOne('balances', { wallet_id: wallet.id, token_id: token.id });
+            const existingBalance = await this.db.findOne<any>('balances', b => b.wallet_id === wallet.id && b.token_id === token.id);
             if (!existingBalance) {
               await this.db.insert<any>('balances', {
                 wallet_id: wallet.id,
@@ -328,7 +328,7 @@ export class AuthController {
         refresh_token: refreshToken,
         ip_address: String(ipAddress),
         user_agent: String(userAgent),
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       });
 
       await this.db.insert<any>('audit_logs', {
@@ -369,7 +369,7 @@ export class AuthController {
     }
 
     try {
-      const activeSession = await this.db.findOne('sessions', { refresh_token: refreshToken });
+      const activeSession = await this.db.findOne<any>('sessions', s => s.refresh_token === refreshToken);
       if (!activeSession) {
         return res.status(401).json({ success: false, message: 'Session not found or revoked' });
       }
@@ -384,7 +384,7 @@ export class AuthController {
         return res.status(401).json({ success: false, message: 'Invalid token type' });
       }
 
-      const wallet = await this.db.findOne('wallets', { user_id: decoded.id });
+      const wallet = await this.db.findOne<any>('wallets', w => w.user_id === decoded.id);
       if (!wallet) {
         return res.status(404).json({ success: false, message: 'Associated wallet not found' });
       }
@@ -407,7 +407,7 @@ export class AuthController {
       await this.db.update('sessions', activeSession.id, {
         token: newToken,
         refresh_token: newRefreshToken,
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       });
 
       return res.status(200).json({
@@ -434,7 +434,7 @@ export class AuthController {
     const token = authHeader.split(' ')[1];
 
     try {
-      const session = await this.db.findOne('sessions', { token: token });
+      const session = await this.db.findOne<any>('sessions', s => s.token === token);
       if (session) {
         await this.db.delete('sessions', session.id);
       }
@@ -458,7 +458,7 @@ export class AuthController {
       const decoded = jwt.verify(token, JWT_SECRET) as any;
       const userId = decoded.id;
 
-      const sessions = await this.db.findMany('sessions', { user_id: userId });
+      const sessions = await this.db.findMany<any>('sessions', s => s.user_id === userId);
       for (const s of sessions) {
         await this.db.delete('sessions', s.id);
       }
@@ -484,7 +484,7 @@ export class AuthController {
     }
 
     try {
-      const wallet = await this.db.findOne('wallets', { address: address });
+      const wallet = await this.db.findOne<any>('wallets', w => w.address === address);
       if (!wallet) {
         return res.status(404).json({ success: false, message: 'Wallet not found' });
       }
@@ -494,14 +494,14 @@ export class AuthController {
         return res.status(verifyRes.status!).json({ success: false, message: verifyRes.message });
       }
 
-      const user = await this.db.findById<any>('users', wallet.user_id);
+      const user = await this.userRepo.findById(wallet.user_id);
       if (!user) {
         return res.status(404).json({ success: false, message: 'User record missing' });
       }
 
       // Update with new passcode
       const newHash = await bcrypt.hash(newPasscode, 12);
-      await this.db.update('users', user.id, {
+      await this.userRepo.update( user.id, {
         passcode_hash: newHash,
         failed_attempts: 0
       });

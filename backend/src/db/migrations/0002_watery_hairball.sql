@@ -1,1 +1,0 @@
-ALTER TABLE `internal_ledger` ADD `tx_hash` varchar(255);

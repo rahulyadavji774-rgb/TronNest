@@ -1,0 +1,46 @@
+[
+  {
+    "id": 1,
+    "token_id": 1,
+    "price_usd": 0.3261,
+    "updated_at": "2026-07-04T13:08:47.519Z"
+  },
+  {
+    "id": 2,
+    "token_id": 2,
+    "price_usd": 0.999251,
+    "updated_at": "2026-07-04T13:08:47.519Z"
+  },
+  {
+    "id": 3,
+    "token_id": 3,
+    "price_usd": 1,
+    "updated_at": "2026-07-04T06:16:20.792Z"
+  },
+  {
+    "id": 4,
+    "token_id": 4,
+    "price_usd": 75.5,
+    "updated_at": "2026-07-04T06:16:20.792Z"
+  },
+  {
+    "id": "948c41b8-e88a-482e-8435-75c4408988a3",
+    "token_id": "dc7fa392-1b47-4961-873a-4f84514af7f3",
+    "price_usd": 1
+  },
+  {
+    "id": "9abae903-c4fc-41f4-b6fb-4d902d5a0c5a",
+    "token_id": "5f581361-e42e-49ce-88d5-fddbcd28c460",
+    "price_usd": 2
+  },
+  {
+    "id": "8f6035bc-6820-4c63-b73d-5acb7dcebea0",
+    "token_id": "55eb0faa-900a-4e0c-81e7-2c478558dceb",
+    "price_usd": 1
+  },
+  {
+    "id": "6e6c2ce2-e563-4b1c-8ba9-b52208d78f1f",
+    "token_id": "0936a0ed-1e6e-4db8-9f68-9dfb7a204a0a",
+    "price_usd": 0.999223
+  }
+]

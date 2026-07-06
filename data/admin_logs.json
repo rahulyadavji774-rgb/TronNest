@@ -1,0 +1,50 @@
+[
+  {
+    "id": "f3e6ec2b-8483-4749-94e7-6a1b019d12ef",
+    "admin_id": 5,
+    "action": "admin_login_success",
+    "ip_address": "169.254.169.126"
+  },
+  {
+    "id": "159aabea-31b3-4e75-8840-f7cd017fa8ec",
+    "admin_id": 5,
+    "action": "admin_login_success",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "c41a77c6-4201-4447-90fc-e563d1a79f21",
+    "admin_id": 5,
+    "action": "mint_internal_tokens: to_wallet=TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg, symbol=mUSD, amount=100",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "380ee3bb-943b-4c88-9c4f-e3b30b6009fb",
+    "admin_id": 5,
+    "action": "deduct_internal_tokens: from_wallet=TFWrrQbrubRozG7g5FT7ZMy5ASJrt1XtGg, symbol=mUSD, amount=10",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "982aa99c-9759-4007-9c08-bd7020dc2a36",
+    "admin_id": 5,
+    "action": "freeze_user_wallet: id=1",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "a6b90aa2-da62-4b51-ad9d-221e85f4069d",
+    "admin_id": 5,
+    "action": "suspend_transfers: user_id=1",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "3e17f866-4d99-4982-80fd-93dd2645078c",
+    "admin_id": 5,
+    "action": "create_custom_token: symbol=TEST",
+    "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "4e55a4e8-b6c1-4a94-9456-176e8681e155",
+    "admin_id": 5,
+    "action": "unfreeze_user_wallet: id=1",
+    "ip_address": "127.0.0.1"
+  }
+]

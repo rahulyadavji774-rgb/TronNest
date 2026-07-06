@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `wallets` (
   `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   `user_id` BIGINT UNSIGNED NOT NULL,
   `address` VARCHAR(34) NOT NULL UNIQUE COMMENT 'TRON Base58 Wallet Address',
-  `encrypted_seed_phrase` TEXT NOT NULL COMMENT 'AES-256-GCM encrypted seed phrase representation',
+  `encrypted_seed` TEXT NOT NULL COMMENT 'AES-256-GCM encrypted seed phrase representation',
   `encrypted_private_key` TEXT NOT NULL COMMENT 'AES-256-GCM encrypted private key',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,

@@ -1,7 +1,8 @@
-import { logger } from '../utils/logger';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getDb, schema } from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 
 function snakeToCamel(str: string) {
   return str.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
@@ -36,22 +37,11 @@ function getTable(tableName: string) {
   throw new Error(`Table ${tableName} not found in schema`);
 }
 
-function buildWhereClause(table: any, conditions: any) {
-  const parts: any[] = [];
-  for (const [key, value] of Object.entries(conditions)) {
-    const colName = snakeToCamel(key);
-    if (table[colName]) {
-      parts.push(eq(table[colName], value));
-    }
-  }
-  if (parts.length === 0) return undefined;
-  if (parts.length === 1) return parts[0];
-  return and(...parts);
-}
-
 export class JsonDatabase {
   private static instance: JsonDatabase;
+
   private constructor() {}
+
   public static getInstance(): JsonDatabase {
     if (!JsonDatabase.instance) {
       JsonDatabase.instance = new JsonDatabase();
@@ -59,111 +49,109 @@ export class JsonDatabase {
     return JsonDatabase.instance;
   }
 
-  public async transaction<T = any>(callback: (tx: any) => Promise<T>): Promise<T> {
+  private getFilePath(tableName: string) {
+    return path.join(process.cwd(), 'data', `${tableName}.json`);
+  }
+
+  private async readLocalData(tableName: string) {
+    const file = this.getFilePath(tableName);
+    if (!fs.existsSync(file)) return [];
+    try {
+      const data = fs.readFileSync(file, 'utf8');
+      return JSON.parse(data);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  private async writeLocalData(tableName: string, data: any[]) {
+    const file = this.getFilePath(tableName);
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  }
+
+  public async query<T>(tableName: string): Promise<T[]> {
     const db = getDb();
-    return await db.transaction(callback);
-  }
-
-  public async query<T = any>(tableName: string, tx?: any): Promise<T[]> {
-    const db = tx || getDb();
-    const table = getTable(tableName);
-    const rows = await db.select().from(table);
-    return rows.map(convertKeysToSnake) as T[];
-  }
-
-  public async findById<T extends { id: string } = any>(tableName: string, id: string, tx?: any): Promise<T | null> {
-    const db = tx || getDb();
-    const table = getTable(tableName);
-    const rows = await db.select().from(table).where(eq(table.id, id)).limit(1);
-    if (!rows.length) return null;
-    return convertKeysToSnake(rows[0]) as T;
-  }
-
-  public async findOne<T = any>(tableName: string, conditions: any, tx?: any): Promise<T | null> {
-    const db = tx || getDb();
-    const table = getTable(tableName);
-    
-    if (typeof conditions === 'function') {
-      const rows = await this.query<T>(tableName, db);
-      return rows.find(conditions) || null;
+    if (db && !db._mock) {
+      const table = getTable(tableName);
+      const rows = await db.select().from(table);
+      return rows.map(convertKeysToSnake) as T[];
+    } else {
+      return (await this.readLocalData(tableName)) as T[];
     }
-
-    const where = buildWhereClause(table, conditions);
-    const query = db.select().from(table);
-    const rows = where ? await query.where(where).limit(1) : await query.limit(1);
-    
-    if (!rows.length) return null;
-    return convertKeysToSnake(rows[0]) as T;
   }
 
-  public async findMany<T = any>(tableName: string, conditions: any, tx?: any): Promise<T[]> {
-    const db = tx || getDb();
-    const table = getTable(tableName);
-    
-    if (typeof conditions === 'function') {
-      const rows = await this.query<T>(tableName, db);
-      return rows.filter(conditions);
+  public async findById<T extends { id: string }>(tableName: string, id: string): Promise<T | null> {
+    const db = getDb();
+    if (db && !db._mock) {
+      const table = getTable(tableName);
+      const rows = await db.select().from(table).where(eq(table.id, id)).limit(1);
+      if (!rows.length) return null;
+      return convertKeysToSnake(rows[0]) as T;
+    } else {
+      const rows = await this.query<T>(tableName);
+      return rows.find((r: any) => String(r.id) === String(id)) || null;
     }
-
-    const where = buildWhereClause(table, conditions);
-    const query = db.select().from(table);
-    const rows = where ? await query.where(where) : await query;
-    return rows.map(convertKeysToSnake) as T[];
   }
 
-  public async insert<T extends { id?: string } = any>(tableName: string, item: T, tx?: any): Promise<T> {
-    const db = tx || getDb();
+  public async findOne<T>(tableName: string, predicate: (item: T) => boolean): Promise<T | null> {
+    const rows = await this.query<T>(tableName);
+    return rows.find(predicate) || null;
+  }
+
+  public async findMany<T>(tableName: string, predicate: (item: T) => boolean): Promise<T[]> {
+    const rows = await this.query<T>(tableName);
+    return rows.filter(predicate);
+  }
+
+  public async insert<T extends { id?: string }>(tableName: string, item: T): Promise<T> {
+    const db = getDb();
     const newItem: any = {
       id: uuidv4(),
       ...convertKeysToCamel(item)
     };
-    
-    const table = getTable(tableName);
-    
-    // Strict schema validation: Ensure all provided keys exist in the Drizzle table schema
-    
-    
-    try {
-
-      console.log("INSERT DEBUG:", tableName, JSON.stringify(newItem));
+    if (db && !db._mock) {
+      const table = getTable(tableName);
       await db.insert(table).values(newItem);
-    } catch (error: any) {
-      logger.error(`Failed query in insert: ${tableName}`);
-      logger.error(`error message: ${error.message}`);
-      logger.error(`error cause: ${error.cause}`);
-      logger.error(`error stack: ${error.stack}`);
-      logger.error(`parameters: ${JSON.stringify(newItem)}`);
-      throw error;
+      return convertKeysToSnake(newItem) as T;
+    } else {
+      const data = await this.readLocalData(tableName);
+      const snakeItem = {
+        id: newItem.id,
+        ...convertKeysToSnake(item)
+      };
+      data.push(snakeItem);
+      await this.writeLocalData(tableName, data);
+      return snakeItem as T;
     }
-    return convertKeysToSnake(newItem) as T;
   }
 
-  public async update<T extends { id: string } = any>(tableName: string, id: string, updates: any, tx?: any): Promise<T | null> {
-    const db = tx || getDb();
-    
-    const table = getTable(tableName);
-    
-    // Strict schema validation: Ensure all provided keys exist in the Drizzle table schema
-    
-    
-    try {
-
+  public async update<T extends { id: string }>(tableName: string, id: string, updates: any): Promise<T | null> {
+    const db = getDb();
+    if (db && !db._mock) {
+      const table = getTable(tableName);
       await db.update(table).set(convertKeysToCamel(updates)).where(eq(table.id, id));
-    } catch (error: any) {
-      logger.error(`Failed query in update: ${tableName}`);
-      logger.error(`error message: ${error.message}`);
-      logger.error(`error cause: ${error.cause}`);
-      logger.error(`error stack: ${error.stack}`);
-      logger.error(`parameters: ${JSON.stringify(updates)}`);
-      throw error;
+      return this.findById<T>(tableName, id);
+    } else {
+      const data = await this.readLocalData(tableName);
+      const index = data.findIndex((r: any) => String(r.id) === String(id));
+      if (index === -1) return null;
+      data[index] = { ...data[index], ...convertKeysToSnake(updates) };
+      await this.writeLocalData(tableName, data);
+      return data[index] as T;
     }
-    return this.findById<T>(tableName, id, db);
   }
 
-  public async delete(tableName: string, id: string, tx?: any): Promise<boolean> {
-    const db = tx || getDb();
-    const table = getTable(tableName);
-    await db.delete(table).where(eq(table.id, id));
-    return true;
+  public async delete(tableName: string, id: string): Promise<boolean> {
+    const db = getDb();
+    if (db && !db._mock) {
+      const table = getTable(tableName);
+      await db.delete(table).where(eq(table.id, id));
+      return true;
+    } else {
+      let data = await this.readLocalData(tableName);
+      data = data.filter((r: any) => String(r.id) !== String(id));
+      await this.writeLocalData(tableName, data);
+      return true;
+    }
   }
 }

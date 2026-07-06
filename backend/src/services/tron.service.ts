@@ -149,8 +149,7 @@ export class TronService {
   /**
    * Fetch real TRX and USDT balances for a given address (cached and coalesced)
    */
-
-  public async getBalances(address: string, tokensList: any[], bypassCache = false): Promise<{ balances: Record<string, number>; failed?: boolean }> {
+  public async getBalances(address: string, bypassCache = false): Promise<{ TRX: number; USDT: number; failed?: boolean }> {
     const now = Date.now();
     const cached = this.balancesCache.get(address);
     if (!bypassCache && cached && (now - cached.timestamp < this.CACHE_TTL_MS)) {
@@ -160,7 +159,8 @@ export class TronService {
 
     let pending = this.balancesPromises.get(address);
     if (bypassCache || !pending) {
-      const fetchPromise = this._fetchBalancesOnChain(address, tokensList).then(result => {
+      const fetchPromise = this._fetchBalancesOnChain(address).then(result => {
+        // Only cache if the query succeeded, or if we didn't have any cached data before
         if (!result.failed || !this.balancesCache.has(address)) {
           this.balancesCache.set(address, { data: result, timestamp: Date.now() });
         }
@@ -183,56 +183,141 @@ export class TronService {
     return pending;
   }
 
-  private async _fetchBalancesOnChain(address: string, tokensList: any[]): Promise<{ balances: Record<string, number>; failed?: boolean }> {
+  private async _fetchBalancesOnChain(address: string): Promise<{ TRX: number; USDT: number; failed?: boolean }> {
     logger.info(`[Balance Sync - Server] Starting on-chain balance query for address: ${address}`);
     
-    const balances: Record<string, number> = {};
-    let anySuccess = false;
-    let anyFailed = false;
+    let trxBalance = 0;
+    let usdtBalance = 0;
+    let trxSuccess = false;
+    let usdtSuccess = false;
+
+    const tokens = this.db.findMany<any>('tokens', t => t.symbol === 'USDT');
+    const usdtToken = tokens[0];
+    const contractAddress = usdtToken?.contract_address || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+    const decimals = usdtToken?.decimals || 6;
 
     const tronWeb = await this.getTronWebInstance(address);
     const lastCached = this.balancesCache.get(address);
 
-    for (const token of tokensList) {
-      if (token.is_internal) continue; // Skip internal tokens (DB only)
+    // 1. Fetch TRX balance (represented in SUN)
+    try {
+      logger.info(`[Balance Sync - Server] Querying TRX balance via TronWeb...`);
+      const sunBalance = await withRetry<any>(() => tronWeb.trx.getBalance(address), 3, 300, 'TRX balance fetch');
+      trxBalance = Number(sunBalance) / 1_000_000;
+      logger.info(`[Balance Sync - Server] Live TRX balance: ${trxBalance} TRX`);
+      trxSuccess = true;
+    } catch (e: any) {
+      logger.error(`[Balance Sync - Server] TRX balance fetch failed for ${address}: ${e.message}`);
+      if (lastCached && lastCached.data) {
+        trxBalance = lastCached.data.TRX;
+        trxSuccess = true;
+        logger.info(`[Balance Sync - Server] TRX fallback used: ${trxBalance} TRX`);
+      } else {
+        trxBalance = 0;
+      }
+    }
 
-      try {
-        if (!token.contract_address || token.contract_address === '') {
-          // TRX native token
-          logger.info(`[Balance Sync - Server] Querying TRX balance via TronWeb...`);
-          const sunBalance = await withRetry<any>(() => tronWeb.trx.getBalance(address), 3, 300, 'TRX balance fetch');
-          balances[token.id] = Number(sunBalance) / 1_000_000;
-          logger.info(`[Balance Sync - Server] Live TRX balance: ${balances[token.id]} TRX`);
-          anySuccess = true;
-        } else {
-          // TRC20 Token
-          logger.info(`[Balance Sync - Server] Querying ${token.symbol} balance via TronWeb contract balanceOf...`);
-          const contract = await withRetry<any>(() => tronWeb.contract().at(token.contract_address), 3, 300, `${token.symbol} contract load`);
-          const rawBalance = await withRetry<any>(() => contract.balanceOf(address).call(), 3, 300, `${token.symbol} contract balance query`);
-          balances[token.id] = Number(rawBalance) / Math.pow(10, token.decimals);
-          logger.info(`[Balance Sync - Server] Live ${token.symbol} balance: ${balances[token.id]} ${token.symbol}`);
-          anySuccess = true;
-        }
-      } catch (e: any) {
-        logger.error(`[Balance Sync - Server] ${token.symbol} balance fetch failed for ${address}: ${e.message}`);
-        anyFailed = true;
-        if (lastCached && lastCached.data && lastCached.data.balances && typeof lastCached.data.balances[token.id] !== 'undefined') {
-          balances[token.id] = lastCached.data.balances[token.id];
-          logger.info(`[Balance Sync - Server] ${token.symbol} fallback used: ${balances[token.id]} ${token.symbol}`);
-        } else {
-          balances[token.id] = 0;
+    // 2. Fetch USDT balance using the contract address
+    try {
+      logger.info(`[Balance Sync - Server] Querying USDT balance via TronWeb contract balanceOf...`);
+      const contract = await withRetry<any>(() => tronWeb.contract().at(contractAddress), 3, 300, 'USDT contract load');
+      const rawBalance = await withRetry<any>(() => contract.balanceOf(address).call(), 3, 300, 'USDT contract balance query');
+      usdtBalance = Number(rawBalance) / Math.pow(10, decimals);
+      logger.info(`[Balance Sync - Server] Live USDT balance: ${usdtBalance} USDT`);
+      usdtSuccess = true;
+    } catch (e: any) {
+      logger.error(`[Balance Sync - Server] USDT balance fetch failed for ${address}: ${e.message}`);
+      if (lastCached && lastCached.data) {
+        usdtBalance = lastCached.data.USDT;
+        usdtSuccess = true;
+        logger.info(`[Balance Sync - Server] USDT fallback used: ${usdtBalance} USDT`);
+      } else {
+        usdtBalance = 0;
+      }
+    }
+
+    // 3. Fallback to direct REST API if TronWeb queries failed completely
+    if (!trxSuccess && !usdtSuccess) {
+      logger.warn(`[Balance Sync - Server] TronWeb RPC calls failed. Trying REST API direct fetch fallback...`);
+      const endpoints = [
+        { name: 'TronGrid Mainnet API', url: `https://api.trongrid.io/v1/accounts/${address}` },
+        { name: 'TronStack Mainnet API', url: `https://api.tronstack.io/v1/accounts/${address}` }
+      ];
+
+      for (const endpoint of endpoints) {
+        try {
+          logger.info(`[Balance Sync - Server] Attempting direct fetch from ${endpoint.name}...`);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+          const fetchHeaders: any = { 'Accept': 'application/json' };
+          const apiKey = process.env.TRONGRID_API_KEY;
+          if (apiKey && apiKey.trim() !== '') {
+            fetchHeaders['TRON-PRO-API-KEY'] = apiKey;
+          }
+
+          const response = await withRetry(async () => {
+            const res = await fetch(endpoint.url, {
+              headers: fetchHeaders,
+              signal: controller.signal
+            });
+            if (res.status === 429) {
+              throw new Error('External API Overloaded');
+            }
+            return res;
+          }, 3, 300, `Direct balance fallback fetch from ${endpoint.name}`);
+
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const json = (await response.json()) as any;
+            if (json && json.success && Array.isArray(json.data)) {
+              if (json.data.length === 0) {
+                trxBalance = 0;
+                usdtBalance = 0;
+                trxSuccess = true;
+                usdtSuccess = true;
+                break;
+              } else {
+                const accountData = json.data[0];
+                const sunBalance = accountData.balance || 0;
+                trxBalance = sunBalance / 1_000_000;
+                trxSuccess = true;
+
+                if (Array.isArray(accountData.trc20)) {
+                  for (const tokenRecord of accountData.trc20) {
+                    const key = Object.keys(tokenRecord)[0];
+                    if (key === contractAddress) {
+                      const rawUsdt = tokenRecord[key];
+                      usdtBalance = Number(rawUsdt) / Math.pow(10, decimals);
+                      usdtSuccess = true;
+                      break;
+                    }
+                  }
+                }
+                break;
+              }
+            }
+          }
+        } catch (err: any) {
+          logger.error(`[Balance Sync - Server] REST API query failed: ${err.message}`);
         }
       }
     }
 
-    if (!anySuccess && tokensList.some(t => !t.is_internal)) {
-      logger.warn(`[Balance Sync - Server] TronWeb RPC calls failed. Falling back to cached data completely.`);
-      return { balances, failed: true };
-    }
+    const failed = !trxSuccess && !usdtSuccess;
+    logger.info(`[Balance Sync - Server] Completed balance sync. Address: ${address} | TRX: ${trxBalance} | USDT: ${usdtBalance} | Failed: ${failed}`);
 
-    return { balances, failed: anyFailed };
+    return {
+      TRX: trxBalance,
+      USDT: usdtBalance,
+      failed: failed
+    };
   }
 
+  /**
+   * Send TRX to a destination address
+   */
   public async transferTrx(
     privateKey: string,
     toAddress: string,
@@ -266,12 +351,16 @@ export class TronService {
   public async transferUsdt(
     privateKey: string,
     toAddress: string,
-    amountUsdt: number,
-    contractAddress: string = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-    decimals: number = 6
+    amountUsdt: number
   ): Promise<{ txHash: string; fee: number }> {
     const tronWeb = await this.getTronWebInstance();
+    
+    const tokens = this.db.findMany<any>('tokens', t => t.symbol === 'USDT');
+    const usdtToken = tokens[0];
+    const contractAddress = usdtToken?.contract_address || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+    const decimals = usdtToken?.decimals || 6;
     const amountInUnits = Math.round(amountUsdt * Math.pow(10, decimals));
+
     try {
       const contract = await tronWeb.contract().at(contractAddress);
       const options = {
