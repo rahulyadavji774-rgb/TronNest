@@ -39,7 +39,7 @@ export const users = mysqlTable('users', {
   passcodeHash: varchar('passcode_hash', { length: 255 }),
   seedPhraseHash: varchar('seed_phrase_hash', { length: 255 }).unique(),
   status: varchar('status', { length: 50 }).default('active').notNull(),
-  failedAttempts: int('failed_attempts').default(0),
+  failedAttempts: int('failed_attempts').notNull().default(0),
   lockedUntil: timestamp('locked_until'),
   lastLogin: timestamp('last_login'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -176,7 +176,7 @@ export const walletSecurity = mysqlTable('wallet_security', {
   id: char('id', { length: 36 }).primaryKey().$defaultFn(() => uuidv4()),
   walletId: char('wallet_id', { length: 36 }).notNull(),
   passcodeHash: varchar('passcode_hash', { length: 255 }),
-  failedAttempts: int('failed_attempts').default(0),
+  failedAttempts: int('failed_attempts').notNull().default(0),
   lockedUntil: timestamp('locked_until'),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow().onUpdateNow()

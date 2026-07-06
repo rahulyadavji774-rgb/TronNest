@@ -41,25 +41,9 @@ async function startServer() {
       const users = await db.query('users');
       logger.info(`Startup Health Check Passed: Wallets loaded: ${wallets.length}. Users loaded: ${users.length}.`);
 
-      const tokens = await db.query('tokens');
-      if (tokens.length === 0) {
-        logger.info('No tokens found. Creating default MUSD token.');
-        const newToken = await db.insert<any>('tokens', {
-          name: 'TronNest USD',
-          symbol: 'MUSD',
-          decimals: 6,
-          logoUrl: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?q=80&w=200&auto=format&fit=crop',
-          description: 'TronNest USD Stablecoin',
-          is_visible: true,
-          is_transfer_enabled: true,
-          is_active: true,
-          is_internal: true
-        });
-        await db.insert<any>('token_prices', {
-          token_id: (newToken as any).id,
-          price_usd: 1.0
-        });
-      }
+      
+      const { StartupService } = await import('./backend/src/services/StartupService');
+      await StartupService.runSystemRepair();
     } catch (e: any) {
       logger.error('Startup Health Check Failed: ' + e.message);
       process.exit(1);

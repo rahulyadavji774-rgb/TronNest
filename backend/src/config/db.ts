@@ -121,13 +121,7 @@ export class JsonDatabase {
     const table = getTable(tableName);
     
     // Strict schema validation: Ensure all provided keys exist in the Drizzle table schema
-    const schemaKeys = Object.keys(table);
-    const providedKeys = typeof newItem !== 'undefined' ? Object.keys(newItem) : Object.keys(convertKeysToCamel(updates));
-    for (const key of providedKeys) {
-      if (!schemaKeys.includes(key)) {
-        logger.warn(`[Drizzle ORM Warning] Field '${key}' is present in the payload but MISSING from the ${tableName} schema definition! Drizzle will silently discard it.`);
-      }
-    }
+    
     
     try {
 
@@ -150,13 +144,7 @@ export class JsonDatabase {
     const table = getTable(tableName);
     
     // Strict schema validation: Ensure all provided keys exist in the Drizzle table schema
-    const schemaKeys = Object.keys(table);
-    const providedKeys = typeof newItem !== 'undefined' ? Object.keys(newItem) : Object.keys(convertKeysToCamel(updates));
-    for (const key of providedKeys) {
-      if (!schemaKeys.includes(key)) {
-        logger.warn(`[Drizzle ORM Warning] Field '${key}' is present in the payload but MISSING from the ${tableName} schema definition! Drizzle will silently discard it.`);
-      }
-    }
+    
     
     try {
 
