@@ -119,5 +119,14 @@
     "ip_address": "127.0.0.1",
     "user_agent": "curl/7.88.1",
     "expires_at": "2026-07-13T08:55:00.895Z"
+  },
+  {
+    "id": "187a63d1-b7b3-4f40-a821-9734b37f388a",
+    "user_id": "7dec710f-ca3b-4273-bb11-8076b2931b8a",
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdkZWM3MTBmLWNhM2ItNDI3My1iYjExLTgwNzZiMjkzMWI4YSIsIndhbGxldElkIjoiNTY5YTFhYTktNjAyYy00NGVlLWI0YzItODE2YjRlZmVmN2I2IiwiYWRkcmVzcyI6IlRUZTlIaVVaeTREWnoxOEI2RjhMS1YzWnF1V2lxS25ublciLCJpYXQiOjE3ODMzMjk5MzksImV4cCI6MTc4MzMzMDgzOX0.ugX--1TgHMbEFi8bpZPy5FHjN-CSLBja28qqDfG4Y0c",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjdkZWM3MTBmLWNhM2ItNDI3My1iYjExLTgwNzZiMjkzMWI4YSIsIndhbGxldElkIjoiNTY5YTFhYTktNjAyYy00NGVlLWI0YzItODE2YjRlZmVmN2I2IiwiYWRkcmVzcyI6IlRUZTlIaVVaeTREWnoxOEI2RjhMS1YzWnF1V2lxS25ublciLCJpc1JlZnJlc2giOnRydWUsImlhdCI6MTc4MzMyOTkzOSwiZXhwIjoxNzgzOTM0NzM5fQ.Edd7wrlUeNQ4MfXaBddA0e7tHfawrM5GY--BlNbobJQ",
+    "ip_address": "127.0.0.1",
+    "user_agent": "curl/7.88.1",
+    "expires_at": "2026-07-13T09:25:39.071Z"
   }
 ]

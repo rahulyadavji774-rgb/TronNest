@@ -158,5 +158,23 @@
     "wallet_id": "4bcfbe98-6685-4d07-85a8-50727c1663bd",
     "token_id": "f8435a81-14d0-4de9-baac-f5dc6433257c",
     "balance": 0
+  },
+  {
+    "id": "ede2bb48-518e-4ce1-a62e-afe1aff0d84c",
+    "wallet_id": "569a1aa9-602c-44ee-b4c2-816b4efef7b6",
+    "token_id": 1,
+    "balance": 0
+  },
+  {
+    "id": "3b0140c1-4191-4f05-9ad4-e18afd39aea7",
+    "wallet_id": "569a1aa9-602c-44ee-b4c2-816b4efef7b6",
+    "token_id": 2,
+    "balance": 0
+  },
+  {
+    "id": "4167dcf3-be97-4350-8caf-c0a852c4b0d3",
+    "wallet_id": "569a1aa9-602c-44ee-b4c2-816b4efef7b6",
+    "token_id": "f8435a81-14d0-4de9-baac-f5dc6433257c",
+    "balance": 0
   }
 ]

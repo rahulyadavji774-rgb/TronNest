@@ -152,5 +152,15 @@
       "address": "TLB8DPQ5NFsrEwwNhcqk1Smqi7h85bJjLy"
     },
     "ip_address": "127.0.0.1"
+  },
+  {
+    "id": "ea63f45e-a754-4df9-8fd3-79ee9414573e",
+    "actor_type": "user",
+    "actor_id": "7dec710f-ca3b-4273-bb11-8076b2931b8a",
+    "action": "wallet_created",
+    "details": {
+      "address": "TTe9HiUZy4DZz18B6F8LKV3ZquWiqKnnnW"
+    },
+    "ip_address": "127.0.0.1"
   }
 ]

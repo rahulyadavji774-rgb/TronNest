@@ -31,5 +31,13 @@
     "passcode_hash": "$2b$12$6IgQjy8BXy4ZnYeoe4E.aeGu30beQ.QEtquy3raLjvnFpIdPN5b9.",
     "failed_attempts": 0,
     "locked_until": null
+  },
+  {
+    "id": "7dec710f-ca3b-4273-bb11-8076b2931b8a",
+    "seed_phrase_hash": "c17138cf125081defb43cf9ed94209ed1c04bb406540bf491e6c12f28f06df40",
+    "status": "active",
+    "passcode_hash": "$2b$12$SAH0mS3sebeBkiz12VBe2O4KmO/TFcnJs7PmJPwnE1oa3.iyemany",
+    "failed_attempts": 0,
+    "locked_until": null
   }
 ]
